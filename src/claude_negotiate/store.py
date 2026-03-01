@@ -74,6 +74,7 @@ class NegotiationStore:
         context: str,
         max_rounds: int = 10,
         references: list[str] | None = None,
+        require_human_approval: bool = False,
     ) -> str:
         neg_id = f"neg-{uuid.uuid4().hex[:8]}"
         artifact_path = f"/var/lib/claude-negotiate/{neg_id}.md"
@@ -90,6 +91,7 @@ class NegotiationStore:
                     "artifact_path": artifact_path,
                     "max_rounds": str(max_rounds),
                     "references": ",".join(references) if references else "",
+                    "require_human_approval": "1" if require_human_approval else "",
                     "status": "open",
                     "created_at": _utcnow(),
                 },
@@ -477,17 +479,27 @@ class NegotiationStore:
         if not state:
             raise ValueError(f"Negotiation {neg_id} not found")
         ch = _content_hash(content)
-        await self._r.xadd(
-            f"neg:{neg_id}",
-            {
-                "agent_id": "human",
-                "content": content,
-                "content_hash": ch,
-                "status": "human_inject",
-                "posted_at": _utcnow(),
-            },
+        pipe_cmds: dict = {}
+        approved = (
+            state.get("require_human_approval")
+            and "approve" in content.lower()
+            and not state.get("human_approved")
         )
-        return {"content_hash": ch, "acknowledged": True}
+        async with self._r.pipeline() as pipe:
+            pipe.xadd(
+                f"neg:{neg_id}",
+                {
+                    "agent_id": "human",
+                    "content": content,
+                    "content_hash": ch,
+                    "status": "human_inject",
+                    "posted_at": _utcnow(),
+                },
+            )
+            if approved:
+                pipe.hset(f"neg:{neg_id}:state", "human_approved", "1")
+            await pipe.execute()
+        return {"content_hash": ch, "acknowledged": True, "approval_granted": approved}
 
     async def close_negotiation(
         self,
@@ -516,6 +528,24 @@ class NegotiationStore:
                 raise ValueError(
                     f"Cannot close negotiation in status '{state['status']}'"
                 )
+
+            # Human approval gate: if require_human_approval is set, block until
+            # a human has called human_inject with content containing "approve"
+            if state.get("require_human_approval") and not state.get("human_approved"):
+                converged_hash = state.get("converged_hash", "")
+                artifact_preview = ""
+                if converged_hash:
+                    entries = await self._r.xrange(f"neg:{neg_id}")
+                    for _eid, fields in entries:
+                        if fields.get("content_hash") == converged_hash:
+                            artifact_preview = _extract_artifact_section(fields["content"])
+                            break
+                return {
+                    "status": "pending_human_approval",
+                    "message": "Human approval required before closing. Call human_inject with content containing 'approve' to proceed.",
+                    "artifact_preview": artifact_preview,
+                    "converged_hash": converged_hash,
+                }
 
             # Soft close: if caller is peer (not initiator), defer to initiator for 60s
             if agent_id != state["initiator_id"] and agent_id != state.get("closed_by", ""):

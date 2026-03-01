@@ -36,6 +36,7 @@ async def open_negotiation(
     context: str,
     max_rounds: int = 10,
     references: list[str] | None = None,
+    require_human_approval: bool = False,
 ) -> dict:
     """Start a new negotiation between N agents.
 
@@ -52,6 +53,10 @@ async def open_negotiation(
 
     references: optional list of prior negotiation IDs this negotiation builds on.
     Stored and returned by get_status, join_negotiation, and list_negotiations.
+
+    require_human_approval: if True, close_negotiation returns status='pending_human_approval'
+    and shows the converged artifact preview until the human calls human_inject with content
+    containing 'approve'. Use when the human must sign off before the artifact is written.
     """
     neg_id = await _store.open_negotiation(
         topic=topic,
@@ -60,6 +65,7 @@ async def open_negotiation(
         context=context,
         max_rounds=max_rounds,
         references=references,
+        require_human_approval=require_human_approval,
     )
     return {"negotiation_id": neg_id, "status": "open"}
 

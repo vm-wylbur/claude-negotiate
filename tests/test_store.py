@@ -695,6 +695,39 @@ async def test_artifact_no_markers_unchanged(store):
     assert result["artifact_content"].startswith("Clean content, no markers.")
 
 
+async def test_human_approval_gate(store):
+    """require_human_approval blocks close until human injects 'approve'."""
+    neg_id = await store.open_negotiation(
+        topic="approval gate test",
+        initiator_id="cc-ha-a",
+        participants=["cc-ha-b"],
+        context="ctx",
+        require_human_approval=True,
+    )
+
+    # Converge
+    r_a = await store.post_position(neg_id=neg_id, agent_id="cc-ha-a", content="proposal", status="proposing")
+    r_b = await store.post_position(
+        neg_id=neg_id, agent_id="cc-ha-b", content="accept", status="accepting",
+        accepting_hash=r_a["content_hash"],
+    )
+    assert r_b["converged"]
+
+    # Close before approval — should be blocked
+    result = await store.close_negotiation(neg_id, "cc-ha-a", final_artifact="agreed content")
+    assert result["status"] == "pending_human_approval"
+    assert "artifact_preview" in result
+    assert "approve" in result["message"].lower()
+
+    # Human injects approval
+    ack = await store.human_inject(neg_id, "Looks good, approve!")
+    assert ack["approval_granted"]
+
+    # Now close succeeds
+    result2 = await store.close_negotiation(neg_id, "cc-ha-a", final_artifact="agreed content")
+    assert result2["status"] == "closed"
+
+
 async def test_three_party_convergence(store):
     """N-party: all 3 agents must accept the same hash before convergence."""
     neg_id = await store.open_negotiation(
