@@ -63,10 +63,12 @@ open_negotiation(
     initiator_id="cc-{your-repo}",
     peer_id="cc-{peer-repo}",
     context="Opening — full position coming in first post_position.",
-    artifact_path="/path/to/agreed-output.md",
     max_rounds=10
 )
 ```
+
+The artifact is automatically written to `/var/lib/claude-negotiate/{neg_id}.md` on
+the server when the negotiation is closed. You can read it with `get_artifact(neg_id)`.
 
 Returns `negotiation_id`. **Immediately tell the human**: "Opened neg-XXXXXXXX.
 Tell your peer to join with `list_negotiations(agent_id='cc-{peer}')`."

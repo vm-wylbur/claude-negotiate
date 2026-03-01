@@ -49,10 +49,10 @@ class NegotiationStore:
         initiator_id: str,
         peer_id: str,
         context: str,
-        artifact_path: str,
         max_rounds: int = 10,
     ) -> str:
         neg_id = f"neg-{uuid.uuid4().hex[:8]}"
+        artifact_path = f"/var/lib/claude-negotiate/{neg_id}.md"
         self._locks[neg_id] = asyncio.Lock()
 
         async with self._r.pipeline() as pipe:

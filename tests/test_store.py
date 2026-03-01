@@ -30,7 +30,6 @@ async def test_full_negotiation(store):
         initiator_id="cc-ntx",
         peer_id="cc-tfcs",
         context="ntx needs read access to /data/shared",
-        artifact_path="/tmp/claude-negotiate-test-acl.md",
     )
     assert neg_id.startswith("neg-")
 
@@ -106,7 +105,6 @@ async def test_human_inject_visible_to_agents(store):
         initiator_id="cc-a",
         peer_id="cc-b",
         context="initial context",
-        artifact_path="/tmp/claude-negotiate-test-inject.md",
     )
 
     result = await store.human_inject(neg_id, "Human says: focus on security")
@@ -128,7 +126,6 @@ async def test_list_negotiations_both_agents(store):
         initiator_id="cc-x",
         peer_id="cc-y",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-list.md",
     )
 
     for agent_id in ("cc-x", "cc-y"):
@@ -143,7 +140,6 @@ async def test_blocked_and_resume(store):
         initiator_id="cc-p",
         peer_id="cc-q",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-blocked.md",
     )
 
     # cc-p blocks
@@ -179,7 +175,6 @@ async def test_update_context_visible_in_stream(store):
         initiator_id="cc-m",
         peer_id="cc-n",
         context="initial",
-        artifact_path="/tmp/claude-negotiate-test-ctx.md",
     )
 
     await store.update_context(
@@ -201,7 +196,6 @@ async def test_wait_for_turn_unblocks_on_peer_post(store):
         initiator_id="cc-w1",
         peer_id="cc-w2",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-wait.md",
     )
 
     # Get the last_id from the initial context entry
@@ -230,7 +224,6 @@ async def test_wait_for_turn_times_out(store):
         initiator_id="cc-t1",
         peer_id="cc-t2",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-timeout.md",
     )
     initial = await store.read_latest(neg_id, "cc-t1", since_id="0")
 
@@ -248,7 +241,6 @@ async def test_wait_for_turn_returns_immediately_when_done(store):
         initiator_id="cc-d1",
         peer_id="cc-d2",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-done.md",
     )
 
     r1 = await store.post_position(neg_id, "cc-d1", "proposal", "proposing")
@@ -272,7 +264,6 @@ async def test_read_latest_includes_accepting_hash(store):
         initiator_id="cc-ah1",
         peer_id="cc-ah2",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-ah.md",
     )
 
     r1 = await store.post_position(neg_id, "cc-ah1", "proposal", "proposing")
@@ -296,7 +287,6 @@ async def test_wait_for_turn_filters_self_turns(store):
         initiator_id="cc-sf1",
         peer_id="cc-sf2",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-sf.md",
     )
 
     initial = await store.read_latest(neg_id, "cc-sf1", since_id="0")
@@ -330,7 +320,6 @@ async def test_cannot_post_to_closed_negotiation(store):
         initiator_id="cc-i",
         peer_id="cc-j",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-closed.md",
     )
 
     # Converge quickly: cc-i proposes (auto-accepts), cc-j accepts → converge
@@ -354,7 +343,6 @@ async def test_single_accept_convergence(store):
         initiator_id="cc-sa-a",
         peer_id="cc-sa-b",
         context="testing single-accept",
-        artifact_path="/tmp/claude-negotiate-test-sa.md",
     )
 
     # B (peer) proposes — auto-stores cc-sa-b_accepting_hash = ch
@@ -390,7 +378,6 @@ async def test_close_auto_fill_artifact(store):
         initiator_id="cc-af-a",
         peer_id="cc-af-b",
         context="testing auto-fill",
-        artifact_path="/tmp/claude-negotiate-test-autofill.md",
     )
 
     # A proposes (auto-accepts), B accepts → converge
@@ -432,7 +419,6 @@ async def test_round_count_in_post_position(store):
         initiator_id="cc-rc-a",
         peer_id="cc-rc-b",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-rc.md",
         max_rounds=5,
     )
 
@@ -471,7 +457,6 @@ async def test_get_artifact(store):
         initiator_id="cc-ga-a",
         peer_id="cc-ga-b",
         context="ctx",
-        artifact_path="/tmp/claude-negotiate-test-ga.md",
     )
 
     # Before convergence: not available
@@ -505,7 +490,7 @@ async def test_get_artifact(store):
     result = await store.get_artifact(neg_id)
     assert result["available"]
     assert result["content"] == artifact_text
-    assert result["artifact_path"] == "/tmp/claude-negotiate-test-ga.md"
+    assert result["artifact_path"] == f"/var/lib/claude-negotiate/{neg_id}.md"
 
 
 async def test_join_negotiation(store):
@@ -515,7 +500,6 @@ async def test_join_negotiation(store):
         initiator_id="cc-jn-a",
         peer_id="cc-jn-b",
         context="initial context",
-        artifact_path="/tmp/claude-negotiate-test-jn.md",
     )
 
     # Post a turn so there's something in the stream
@@ -556,7 +540,6 @@ async def test_impasse_declared_at_max_rounds(store):
         initiator_id="cc-imp-a",
         peer_id="cc-imp-b",
         context="testing impasse detection",
-        artifact_path="/tmp/claude-negotiate-test-impasse.md",
         max_rounds=2,
     )
 
