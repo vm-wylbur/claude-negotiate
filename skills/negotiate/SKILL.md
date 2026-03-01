@@ -102,22 +102,24 @@ peer responds, then returns the new turns automatically.
   response
 - Rule of thumb: `read_latest` to catch up, `wait_for_turn` to wait
 
-```
+```python
 # First: read full history and post your opening position
 result = read_latest(neg_id, "cc-{you}", since_id="0")
 last_id = result["last_id"]
-post_position(neg_id, "cc-{you}", my_opening, "proposing")
+result = post_position(neg_id, "cc-{you}", my_opening, "proposing")
+entry_id = result["entry_id"]   # use this as since_id to skip your own turn
 
 # Loop until done
 while True:
-    result = wait_for_turn(neg_id, "cc-{you}", since_id=last_id, timeout_seconds=120)
+    result = wait_for_turn(neg_id, "cc-{you}", since_id=entry_id, timeout_seconds=120)
     if result["timed_out"]:
         continue  # peer is slow, keep waiting
     last_id = result["last_id"]
     if result["converged"] or result["impasse"]:
         break
     # read result["turns"], reason, then post your response
-    post_position(neg_id, "cc-{you}", my_response, status, accepting_hash=...)
+    result = post_position(neg_id, "cc-{you}", my_response, status, accepting_hash=...)
+    entry_id = result["entry_id"]   # use this as since_id to skip your own turn
 
 if result["converged"]:
     close_negotiation(neg_id, "cc-{you}")
@@ -125,6 +127,20 @@ if result["converged"]:
 
 The human does not need to prompt between turns. Each agent runs this loop
 in a single conversation, blocking between turns until the peer responds.
+
+## Joining as peer
+
+When the human tells you to join an existing negotiation, use `join_negotiation`
+as your entry point — not `read_latest`. It returns your role, the full
+transcript, and `last_id` ready for `wait_for_turn` in one call.
+
+```
+join_negotiation(negotiation_id=neg_id, agent_id="cc-{you}")
+```
+
+After joining, post your opening position with `post_position`, then enter the
+autonomous loop above (starting at the `while True` block — `join_negotiation`
+already gives you `last_id`).
 
 ## Manual loop (fallback)
 
@@ -172,6 +188,26 @@ convergence is declared immediately — you do NOT need to post a second
 
 When `post_position` returns `{"converged": true}`, call `close_negotiation`.
 
+## Close coordination
+
+When convergence is declared, both agents see `converged=True`. By convention:
+- **The initiator closes.** The peer should wait briefly (a few seconds) and
+  call `close_negotiation` only if the initiator hasn't closed yet.
+- The closer controls artifact quality. Pass `final_artifact` with just the
+  agreed content (no preamble, no Q&A) — extract the relevant section from the
+  converged turn rather than letting the server auto-fill the raw turn content.
+
+```
+close_negotiation(
+    negotiation_id=neg_id,
+    agent_id="cc-{you}",
+    final_artifact="<extracted agreement section only>"
+)
+```
+
+If you omit `final_artifact`, the server writes the converged turn's raw
+content — which may include conversational preamble.
+
 ## Closing
 
 ```
@@ -181,9 +217,7 @@ close_negotiation(
 )
 ```
 
-If you omit `final_artifact`, the server writes the converged turn's content
-automatically. The response always includes `artifact_content` — the text that
-was written.
+The response always includes `artifact_content` — the text that was written.
 
 Idempotent — safe if your peer closes first; you'll get `"already_closed"`.
 After closing, implement what was agreed.
@@ -237,13 +271,6 @@ authoritative. Respond to it before making your next proposal. The human can
 redirect, correct, or provide missing facts.
 
 ## Additional tools
-
-**join_negotiation**: Use when joining an existing negotiation rather than
-opening one. Returns your role, full transcript, and `last_id` ready for
-`wait_for_turn`.
-```
-join_negotiation(negotiation_id=neg_id, agent_id="cc-{you}")
-```
 
 **get_artifact**: Read the agreed artifact from the server, even if you're on a
 different host.
