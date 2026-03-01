@@ -543,3 +543,43 @@ async def test_join_negotiation(store):
 
     # converged_hash is empty before convergence
     assert result_a["converged_hash"] == ""
+
+
+async def test_impasse_declared_at_max_rounds(store):
+    """Fix 2: impasse is declared when turn count exceeds max_rounds * 2."""
+    neg_id = await store.open_negotiation(
+        topic="impasse test",
+        initiator_id="cc-imp-a",
+        peer_id="cc-imp-b",
+        context="testing impasse detection",
+        artifact_path="/tmp/claude-negotiate-test-impasse.md",
+        max_rounds=2,
+    )
+
+    # Two agents alternate proposing (no accepting) until impasse is declared.
+    # max_rounds=2 means impasse fires when turn_count > 4 (2 * 2).
+    # Stream starts with 1 context entry. We need >4 entries total.
+    agents = ["cc-imp-a", "cc-imp-b"]
+    last_result = None
+    for i in range(5):
+        agent = agents[i % 2]
+        last_result = await store.post_position(
+            neg_id=neg_id,
+            agent_id=agent,
+            content=f"Proposal round {i} from {agent}",
+            status="proposing",
+        )
+        if last_result.get("negotiation_status") == "impasse" or (
+            await store.get_status(neg_id)
+        )["status"] == "impasse":
+            break
+
+    # Check the final read_latest response
+    read = await store.read_latest(neg_id, "cc-imp-a", since_id="0")
+    assert read["negotiation_status"] == "impasse", (
+        f"Expected impasse, got {read['negotiation_status']}"
+    )
+
+    # get_status must also report impasse
+    status = await store.get_status(neg_id)
+    assert status["status"] == "impasse"

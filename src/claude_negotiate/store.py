@@ -161,6 +161,10 @@ class NegotiationStore:
                         },
                     )
                     converged = True
+            if not converged:
+                turn_count = await self._r.xlen(stream_key)
+                if turn_count > int(state["max_rounds"]) * 2:
+                    await self._r.hset(state_key, "status", "impasse")
         else:
             # Task 5: proposing/counter branch — auto-store self-accepting hash
             # and check if the other agent already accepted this same hash
@@ -237,10 +241,6 @@ class NegotiationStore:
         ]
         last_id = entries[-1][0] if entries else since_id
 
-        # Task 7: get round count atomically
-        async with self._r.pipeline() as pipe:
-            pipe.xlen(stream_key)
-            await pipe.execute()
         turns_used = await self._r.xlen(stream_key)
         max_turns = int(state["max_rounds"]) * 2
 
@@ -287,75 +287,78 @@ class NegotiationStore:
                 "max_turns": max_turns,
             }
 
-        # XREAD BLOCK: holds connection open until new entries arrive or timeout
-        result = await self._r.xread(
-            {stream_key: since_id},
-            block=timeout_seconds * 1000,
-            count=20,
-        )
+        current_since_id = since_id
+        while True:
+            # XREAD BLOCK: holds connection open until new entries arrive or timeout
+            result = await self._r.xread(
+                {stream_key: current_since_id},
+                block=timeout_seconds * 1000,
+                count=20,
+            )
 
-        if not result:
-            # Timed out — re-read state in case it changed during the wait
-            state = await self._r.hgetall(state_key)
+            if not result:
+                # Timed out — re-read state in case it changed during the wait
+                state = await self._r.hgetall(state_key)
+                turns_used = await self._r.xlen(stream_key)
+                return {
+                    "turns": [],
+                    "last_id": current_since_id,
+                    "negotiation_status": state["status"],
+                    "converged": state["status"] == "converged",
+                    "impasse": state["status"] == "impasse",
+                    "timed_out": True,
+                    "turns_used": turns_used,
+                    "max_turns": max_turns,
+                }
+
+            entries = result[0][1]
+
+            # Bug 1 fix: if any returned entry has status=="accepting", re-read state
+            # in a small retry loop to let the convergence write propagate.
+            if any(fields.get("status") == "accepting" for _, fields in entries):
+                for _ in range(3):
+                    state = await self._r.hgetall(state_key)
+                    if state.get("status") not in ("open", "blocked"):
+                        break
+                    await asyncio.sleep(0.05)
+            else:
+                # Re-read state after blocking — convergence may have been declared
+                state = await self._r.hgetall(state_key)
+
+            # Bug 2 fix: filter out self-turns from the returned list, but track
+            # last_id across all entries (including self-turns) so we don't re-read.
+            last_id = entries[-1][0]
+            turns = [
+                {
+                    "id": entry_id,
+                    "agent_id": fields["agent_id"],
+                    "content": fields["content"],
+                    "content_hash": fields["content_hash"],
+                    "status": fields["status"],
+                    "accepting_hash": fields.get("accepting_hash", ""),  # Bug 3 fix
+                    "posted_at": fields.get("posted_at", ""),
+                }
+                for entry_id, fields in entries
+                if fields["agent_id"] != agent_id
+            ]
+
+            # If all returned entries were self-turns, keep blocking rather than
+            # returning empty — unless the negotiation is already done.
+            if not turns and state["status"] in ("open", "blocked"):
+                current_since_id = last_id
+                continue
+
             turns_used = await self._r.xlen(stream_key)
             return {
-                "turns": [],
-                "last_id": since_id,
+                "turns": turns,
+                "last_id": last_id,
                 "negotiation_status": state["status"],
                 "converged": state["status"] == "converged",
                 "impasse": state["status"] == "impasse",
-                "timed_out": True,
+                "timed_out": False,
                 "turns_used": turns_used,
                 "max_turns": max_turns,
             }
-
-        entries = result[0][1]
-
-        # Bug 1 fix: if any returned entry has status=="accepting", re-read state
-        # in a small retry loop to let the convergence write propagate.
-        if any(fields.get("status") == "accepting" for _, fields in entries):
-            for _ in range(3):
-                state = await self._r.hgetall(state_key)
-                if state.get("status") not in ("open", "blocked"):
-                    break
-                await asyncio.sleep(0.05)
-        else:
-            # Re-read state after blocking — convergence may have been declared
-            state = await self._r.hgetall(state_key)
-
-        # Bug 2 fix: filter out self-turns from the returned list, but track
-        # last_id across all entries (including self-turns) so we don't re-read.
-        last_id = entries[-1][0]
-        turns = [
-            {
-                "id": entry_id,
-                "agent_id": fields["agent_id"],
-                "content": fields["content"],
-                "content_hash": fields["content_hash"],
-                "status": fields["status"],
-                "accepting_hash": fields.get("accepting_hash", ""),  # Bug 3 fix
-                "posted_at": fields.get("posted_at", ""),
-            }
-            for entry_id, fields in entries
-            if fields["agent_id"] != agent_id
-        ]
-
-        # If all returned entries were self-turns, keep blocking rather than
-        # returning empty — unless the negotiation is already done.
-        if not turns and state["status"] in ("open", "blocked"):
-            return await self.wait_for_turn(neg_id, agent_id, since_id=last_id, timeout_seconds=timeout_seconds)
-
-        turns_used = await self._r.xlen(stream_key)
-        return {
-            "turns": turns,
-            "last_id": last_id,
-            "negotiation_status": state["status"],
-            "converged": state["status"] == "converged",
-            "impasse": state["status"] == "impasse",
-            "timed_out": False,
-            "turns_used": turns_used,
-            "max_turns": max_turns,
-        }
 
     async def update_context(
         self, neg_id: str, agent_id: str, additional_context: str
@@ -518,7 +521,7 @@ class NegotiationStore:
         state = await self._r.hgetall(f"neg:{neg_id}:state")
         if not state:
             raise ValueError(f"Negotiation {neg_id} not found")
-        if state["status"] not in ("converged", "closed"):
+        if state["status"] != "closed":
             return {"available": False, "status": state["status"], "artifact_path": ""}
         artifact_path = state.get("artifact_path", "")
         p = Path(artifact_path)
