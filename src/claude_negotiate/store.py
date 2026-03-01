@@ -7,6 +7,7 @@
 import asyncio
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,11 @@ def _utcnow() -> str:
 
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.strip().encode()).hexdigest()[:16]
+
+
+def _topic_slug(topic: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")
+    return slug[:40]
 
 
 class NegotiationStore:
@@ -504,11 +510,15 @@ class NegotiationStore:
                     )
                 final_artifact = artifact_text
 
-            # Use semantic name if provided, otherwise keep the neg_id default
+            # Derive artifact path: explicit name > auto-generated slug > neg_id default
             if artifact_name:
                 artifact_path = f"/var/lib/claude-negotiate/{artifact_name}"
             else:
-                artifact_path = state["artifact_path"]
+                date = _utcnow()[:10].replace("-", "")
+                slug = _topic_slug(state.get("topic", neg_id))
+                init = state["initiator_id"].removeprefix("cc-")
+                peer = state["peer_id"].removeprefix("cc-")
+                artifact_path = f"/var/lib/claude-negotiate/{init}-{peer}-{slug}-{date}.md"
 
             # Append provenance footer
             closed_at = _utcnow()

@@ -498,7 +498,8 @@ async def test_get_artifact(store):
     assert result["content"].startswith(artifact_text)
     assert "Agreed:" in result["content"]
     assert neg_id in result["content"]
-    assert result["artifact_path"] == f"/var/lib/claude-negotiate/{neg_id}.md"
+    assert result["artifact_path"].startswith("/var/lib/claude-negotiate/")
+    assert result["artifact_path"].endswith(".md")
 
 
 async def test_join_negotiation(store):
