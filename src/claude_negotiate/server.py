@@ -35,12 +35,16 @@ async def open_negotiation(
     peer_id: str,
     context: str,
     max_rounds: int = 10,
+    references: list[str] | None = None,
 ) -> dict:
     """Start a new negotiation between two agents.
 
     context should include: your constraints, initial position, and relevant paths.
     The artifact is written to /var/lib/claude-negotiate/{neg_id}.md on the server.
     Returns negotiation_id — share this with your peer so they can join.
+
+    references: optional list of prior negotiation IDs this negotiation builds on.
+    Stored and returned by get_status, join_negotiation, and list_negotiations.
     """
     neg_id = await _store.open_negotiation(
         topic=topic,
@@ -48,6 +52,7 @@ async def open_negotiation(
         peer_id=peer_id,
         context=context,
         max_rounds=max_rounds,
+        references=references,
     )
     return {"negotiation_id": neg_id, "status": "open"}
 

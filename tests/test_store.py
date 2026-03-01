@@ -638,6 +638,43 @@ async def test_artifact_section_markers(store):
     assert "Agreed:" in result["artifact_content"]  # footer still appended
 
 
+async def test_references_field(store):
+    """references field links to prior negotiations."""
+    # Open a prior negotiation
+    prior_id = await store.open_negotiation(
+        topic="prior negotiation",
+        initiator_id="cc-rf-a",
+        peer_id="cc-rf-b",
+        context="ctx",
+    )
+
+    # Open a new one referencing the prior
+    neg_id = await store.open_negotiation(
+        topic="follow-up negotiation",
+        initiator_id="cc-rf-a",
+        peer_id="cc-rf-b",
+        context="ctx",
+        references=[prior_id],
+    )
+
+    # get_status should return references
+    status = await store.get_status(neg_id)
+    assert status["references"] == [prior_id]
+
+    # join_negotiation should return references
+    joined = await store.join_negotiation(neg_id, "cc-rf-b")
+    assert joined["references"] == [prior_id]
+
+    # list_negotiations should include references
+    listing = await store.list_negotiations("cc-rf-a")
+    neg_entry = next(n for n in listing["negotiations"] if n["negotiation_id"] == neg_id)
+    assert neg_entry["references"] == [prior_id]
+
+    # Negotiation with no references returns empty list
+    status2 = await store.get_status(prior_id)
+    assert status2["references"] == []
+
+
 async def test_artifact_no_markers_unchanged(store):
     """Content without markers is written as-is."""
     neg_id = await store.open_negotiation(

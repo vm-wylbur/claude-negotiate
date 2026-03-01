@@ -68,6 +68,7 @@ class NegotiationStore:
         peer_id: str,
         context: str,
         max_rounds: int = 10,
+        references: list[str] | None = None,
     ) -> str:
         neg_id = f"neg-{uuid.uuid4().hex[:8]}"
         artifact_path = f"/var/lib/claude-negotiate/{neg_id}.md"
@@ -82,6 +83,7 @@ class NegotiationStore:
                     "peer_id": peer_id,
                     "artifact_path": artifact_path,
                     "max_rounds": str(max_rounds),
+                    "references": ",".join(references) if references else "",
                     "status": "open",
                     "created_at": _utcnow(),
                 },
@@ -418,7 +420,10 @@ class NegotiationStore:
         if not state:
             raise ValueError(f"Negotiation {neg_id} not found")
         turn_count = await self._r.xlen(f"neg:{neg_id}")
-        return {**state, "turn_count": turn_count, "negotiation_id": neg_id}
+        result = {**state, "turn_count": turn_count, "negotiation_id": neg_id}
+        refs_str = result.pop("references", "")
+        result["references"] = [r for r in refs_str.split(",") if r]
+        return result
 
     async def list_negotiations(self, agent_id: str) -> dict:
         neg_ids = await self._r.smembers(f"pending:{agent_id}")
@@ -434,6 +439,7 @@ class NegotiationStore:
                         "initiator_id": state.get("initiator_id", ""),
                         "peer_id": state.get("peer_id", ""),
                         "created_at": state.get("created_at", ""),
+                        "references": [r for r in state.get("references", "").split(",") if r],
                     }
                 )
         return {"negotiations": negotiations}
@@ -615,6 +621,7 @@ class NegotiationStore:
             for entry_id, fields in entries
         ]
         last_id = entries[-1][0] if entries else "0"
+        refs_str = state.get("references", "")
         return {
             "negotiation_id": neg_id,
             "your_agent_id": agent_id,
@@ -627,4 +634,5 @@ class NegotiationStore:
             "converged_hash": state.get("converged_hash", ""),
             "last_id": last_id,
             "turns": turns,
+            "references": [r for r in refs_str.split(",") if r],
         }
