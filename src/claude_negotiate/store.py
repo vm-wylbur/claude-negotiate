@@ -1,0 +1,325 @@
+# Author: PB and Claude
+# Date: 2026-02-28
+# License: (c) Patrick Ball, 2026, GPL-2 or newer
+#
+# claude-negotiate/src/claude_negotiate/store.py
+
+import asyncio
+import hashlib
+import json
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal
+
+import redis.asyncio as aioredis
+
+TTL = 2_592_000  # 30 days in seconds
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _content_hash(content: str) -> str:
+    return hashlib.sha256(content.strip().encode()).hexdigest()[:16]
+
+
+class NegotiationStore:
+    def __init__(self, redis_url: str):
+        self._redis_url = redis_url
+        self._r: aioredis.Redis | None = None
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    async def connect(self) -> None:
+        self._r = aioredis.from_url(self._redis_url, decode_responses=True)
+
+    async def disconnect(self) -> None:
+        if self._r:
+            await self._r.aclose()
+
+    def _lock(self, neg_id: str) -> asyncio.Lock:
+        if neg_id not in self._locks:
+            self._locks[neg_id] = asyncio.Lock()
+        return self._locks[neg_id]
+
+    async def open_negotiation(
+        self,
+        topic: str,
+        initiator_id: str,
+        peer_id: str,
+        context: str,
+        artifact_path: str,
+        max_rounds: int = 10,
+    ) -> str:
+        neg_id = f"neg-{uuid.uuid4().hex[:8]}"
+        self._locks[neg_id] = asyncio.Lock()
+
+        async with self._r.pipeline() as pipe:
+            pipe.hset(
+                f"neg:{neg_id}:state",
+                mapping={
+                    "topic": topic,
+                    "initiator_id": initiator_id,
+                    "peer_id": peer_id,
+                    "artifact_path": artifact_path,
+                    "max_rounds": str(max_rounds),
+                    "status": "open",
+                    "created_at": _utcnow(),
+                },
+            )
+            pipe.expire(f"neg:{neg_id}:state", TTL)
+            pipe.sadd(f"pending:{initiator_id}", neg_id)
+            pipe.sadd(f"pending:{peer_id}", neg_id)
+            pipe.expire(f"pending:{initiator_id}", TTL)
+            pipe.expire(f"pending:{peer_id}", TTL)
+            pipe.xadd(
+                f"neg:{neg_id}",
+                {
+                    "agent_id": initiator_id,
+                    "content": context,
+                    "content_hash": _content_hash(context),
+                    "status": "context",
+                    "posted_at": _utcnow(),
+                },
+            )
+            pipe.expire(f"neg:{neg_id}", TTL)
+            await pipe.execute()
+
+        return neg_id
+
+    async def post_position(
+        self,
+        neg_id: str,
+        agent_id: str,
+        content: str,
+        status: Literal["proposing", "accepting", "counter", "blocked"],
+        accepting_hash: str | None = None,
+    ) -> dict:
+        state_key = f"neg:{neg_id}:state"
+        stream_key = f"neg:{neg_id}"
+
+        state = await self._r.hgetall(state_key)
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+        if state["status"] not in ("open", "blocked"):
+            raise ValueError(f"Negotiation {neg_id} is {state['status']}, cannot post")
+
+        ch = _content_hash(content)
+        entry = {
+            "agent_id": agent_id,
+            "content": content,
+            "content_hash": ch,
+            "status": status,
+            "accepting_hash": accepting_hash or "",
+            "posted_at": _utcnow(),
+        }
+
+        if status == "blocked":
+            await self._r.xadd(stream_key, entry)
+            await self._r.hset(
+                state_key, mapping={"status": "blocked", "blocked_by": agent_id}
+            )
+            return {"content_hash": ch, "converged": False, "blocked": True}
+
+        # Clear blocked status when the blocking agent resumes
+        if state["status"] == "blocked" and state.get("blocked_by") == agent_id:
+            await self._r.hset(state_key, "status", "open")
+
+        converged = False
+        if status == "accepting" and accepting_hash:
+            async with self._lock(neg_id):
+                await self._r.xadd(stream_key, entry)
+                await self._r.hset(
+                    state_key, f"{agent_id}_accepting_hash", accepting_hash
+                )
+                initiator = state["initiator_id"]
+                peer = state["peer_id"]
+                other_id = peer if agent_id == initiator else initiator
+                other_hash = await self._r.hget(
+                    state_key, f"{other_id}_accepting_hash"
+                )
+                if other_hash and other_hash == accepting_hash:
+                    await self._r.hset(
+                        state_key,
+                        mapping={
+                            "status": "converged",
+                            "converged_hash": accepting_hash,
+                        },
+                    )
+                    converged = True
+        else:
+            await self._r.xadd(stream_key, entry)
+            turn_count = await self._r.xlen(stream_key)
+            if turn_count > int(state["max_rounds"]) * 2:
+                await self._r.hset(state_key, "status", "impasse")
+
+        return {"content_hash": ch, "converged": converged, "blocked": False}
+
+    async def read_latest(
+        self,
+        neg_id: str,
+        agent_id: str,
+        since_id: str = "0",
+    ) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+
+        if since_id == "0":
+            entries = await self._r.xrange(f"neg:{neg_id}")
+        else:
+            result = await self._r.xread({f"neg:{neg_id}": since_id}, count=200)
+            entries = result[0][1] if result else []
+
+        turns = [
+            {
+                "id": entry_id,
+                "agent_id": fields["agent_id"],
+                "content": fields["content"],
+                "content_hash": fields["content_hash"],
+                "status": fields["status"],
+                "posted_at": fields.get("posted_at", ""),
+            }
+            for entry_id, fields in entries
+        ]
+        last_id = entries[-1][0] if entries else since_id
+
+        return {
+            "turns": turns,
+            "last_id": last_id,
+            "negotiation_status": state["status"],
+            "converged": state["status"] == "converged",
+            "impasse": state["status"] == "impasse",
+            "blocked": state["status"] == "blocked",
+            "blocked_by": state.get("blocked_by", ""),
+        }
+
+    async def update_context(
+        self, neg_id: str, agent_id: str, additional_context: str
+    ) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+
+        entry = {
+            "agent_id": agent_id,
+            "content": additional_context,
+            "content_hash": _content_hash(additional_context),
+            "status": "context_update",
+            "posted_at": _utcnow(),
+        }
+        async with self._r.pipeline() as pipe:
+            pipe.rpush(
+                f"neg:{neg_id}:ctx",
+                json.dumps(
+                    {
+                        "agent_id": agent_id,
+                        "content": additional_context,
+                        "posted_at": _utcnow(),
+                    }
+                ),
+            )
+            pipe.xadd(f"neg:{neg_id}", entry)
+            await pipe.execute()
+
+        return {"acknowledged": True}
+
+    async def get_status(self, neg_id: str) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+        turn_count = await self._r.xlen(f"neg:{neg_id}")
+        return {**state, "turn_count": turn_count, "negotiation_id": neg_id}
+
+    async def list_negotiations(self, agent_id: str) -> dict:
+        neg_ids = await self._r.smembers(f"pending:{agent_id}")
+        negotiations = []
+        for neg_id in sorted(neg_ids):
+            state = await self._r.hgetall(f"neg:{neg_id}:state")
+            if state:
+                negotiations.append(
+                    {
+                        "negotiation_id": neg_id,
+                        "topic": state.get("topic", ""),
+                        "status": state.get("status", ""),
+                        "initiator_id": state.get("initiator_id", ""),
+                        "peer_id": state.get("peer_id", ""),
+                        "created_at": state.get("created_at", ""),
+                    }
+                )
+        return {"negotiations": negotiations}
+
+    async def get_transcript(self, neg_id: str) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+        entries = await self._r.xrange(f"neg:{neg_id}")
+        turns = [
+            {
+                "id": entry_id,
+                "agent_id": fields["agent_id"],
+                "status": fields["status"],
+                "content": fields["content"],
+                "content_hash": fields["content_hash"],
+                "posted_at": fields.get("posted_at", ""),
+            }
+            for entry_id, fields in entries
+        ]
+        return {
+            "negotiation_id": neg_id,
+            "topic": state.get("topic", ""),
+            "status": state.get("status", ""),
+            "artifact_path": state.get("artifact_path", ""),
+            "turns": turns,
+        }
+
+    async def human_inject(self, neg_id: str, content: str) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+        ch = _content_hash(content)
+        await self._r.xadd(
+            f"neg:{neg_id}",
+            {
+                "agent_id": "human",
+                "content": content,
+                "content_hash": ch,
+                "status": "human_inject",
+                "posted_at": _utcnow(),
+            },
+        )
+        return {"content_hash": ch, "acknowledged": True}
+
+    async def close_negotiation(
+        self, neg_id: str, agent_id: str, final_artifact: str
+    ) -> dict:
+        state_key = f"neg:{neg_id}:state"
+        async with self._lock(neg_id):
+            state = await self._r.hgetall(state_key)
+            if not state:
+                raise ValueError(f"Negotiation {neg_id} not found")
+            if state["status"] == "closed":
+                return {
+                    "status": "already_closed",
+                    "artifact_path": state.get("artifact_path", ""),
+                }
+            if state["status"] != "converged":
+                raise ValueError(
+                    f"Cannot close negotiation in status '{state['status']}'"
+                )
+
+            artifact_path = state["artifact_path"]
+            p = Path(artifact_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(final_artifact)
+
+            await self._r.hset(
+                state_key,
+                mapping={
+                    "status": "closed",
+                    "closed_by": agent_id,
+                    "closed_at": _utcnow(),
+                },
+            )
+        return {"status": "closed", "artifact_path": artifact_path}

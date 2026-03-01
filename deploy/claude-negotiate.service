@@ -1,0 +1,28 @@
+# claude-negotiate/deploy/claude-negotiate.service
+#
+# Install:
+#   sudo cp deploy/claude-negotiate.service /etc/systemd/system/
+#   sudo mkdir -p /etc/claude-negotiate
+#   sudo install -m 600 -o root /dev/stdin /etc/claude-negotiate/env <<'EOF'
+#   REDIS_URL=redis://:PASSWORD@127.0.0.1:6379/0
+#   EOF
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now claude-negotiate
+
+[Unit]
+Description=claude-negotiate MCP server
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=pball
+WorkingDirectory=/opt/claude-negotiate
+EnvironmentFile=/etc/claude-negotiate/env
+ExecStart=/opt/claude-negotiate/.venv/bin/python -m claude_negotiate.server --port 7832
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
