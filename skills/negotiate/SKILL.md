@@ -25,7 +25,8 @@ cp -r /path/to/claude-negotiate/skills/negotiate ~/.claude/skills/
 
 ## Session start
 
-Always check for pending negotiations at session start:
+Always check for pending negotiations at session start using the
+**claude-negotiate MCP tool**:
 
 ```
 list_negotiations(agent_id="cc-{your-repo-name}")
@@ -54,8 +55,12 @@ Do NOT open a negotiation for:
 ## Opening a negotiation
 
 The human will tell you the topic and who your peer(s) are. They'll also tell the
-peer(s) to join. **Do not research first** — open immediately with a brief
-placeholder context so the human can unblock your peers:
+peer(s) to join.
+
+**STOP. Do NOT research your repo first.** Use the **claude-negotiate MCP tool**
+to open immediately with a placeholder context. The human needs the neg-id NOW
+so they can unblock your peers. Research happens AFTER you open and AFTER you
+share the neg-id:
 
 ```
 # 2-party
@@ -86,11 +91,14 @@ The artifact filename includes all participants:
 The artifact is automatically written to `/var/lib/claude-negotiate/{...}.md` on
 the server when the negotiation is closed. You can read it with `get_artifact(neg_id)`.
 
-Returns `negotiation_id`. **Immediately tell the human**: "Opened neg-XXXXXXXX.
-Tell all peers to join with `list_negotiations(agent_id='cc-{peer}')`."
+Returns `negotiation_id`. **Your very next message to the human MUST be**:
+"Opened neg-XXXXXXXX. Tell your peers to join with
+`list_negotiations(agent_id='cc-{peer}')`."
+
+Do not say anything else first. Do not research. Pass the neg-id immediately.
 
 Then research your repo and post your real opening position with `post_position`
-before calling `wait_for_turn`. Your peer will join and block waiting for your
+before calling `wait_for_turn`. Your peers will join and block waiting for your
 first turn.
 
 ## Writing a good context field
