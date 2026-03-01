@@ -28,7 +28,7 @@ async def test_full_negotiation(store):
     neg_id = await store.open_negotiation(
         topic="test ACL scheme",
         initiator_id="cc-ntx",
-        peer_id="cc-tfcs",
+        participants=["cc-tfcs"],
         context="ntx needs read access to /data/shared",
     )
     assert neg_id.startswith("neg-")
@@ -103,7 +103,7 @@ async def test_human_inject_visible_to_agents(store):
     neg_id = await store.open_negotiation(
         topic="inject test",
         initiator_id="cc-a",
-        peer_id="cc-b",
+        participants=["cc-b"],
         context="initial context",
     )
 
@@ -124,7 +124,7 @@ async def test_list_negotiations_both_agents(store):
     neg_id = await store.open_negotiation(
         topic="listing test",
         initiator_id="cc-x",
-        peer_id="cc-y",
+        participants=["cc-y"],
         context="ctx",
     )
 
@@ -138,7 +138,7 @@ async def test_blocked_and_resume(store):
     neg_id = await store.open_negotiation(
         topic="blocking test",
         initiator_id="cc-p",
-        peer_id="cc-q",
+        participants=["cc-q"],
         context="ctx",
     )
 
@@ -173,7 +173,7 @@ async def test_update_context_visible_in_stream(store):
     neg_id = await store.open_negotiation(
         topic="context update test",
         initiator_id="cc-m",
-        peer_id="cc-n",
+        participants=["cc-n"],
         context="initial",
     )
 
@@ -194,7 +194,7 @@ async def test_wait_for_turn_unblocks_on_peer_post(store):
     neg_id = await store.open_negotiation(
         topic="wait test",
         initiator_id="cc-w1",
-        peer_id="cc-w2",
+        participants=["cc-w2"],
         context="ctx",
     )
 
@@ -222,7 +222,7 @@ async def test_wait_for_turn_times_out(store):
     neg_id = await store.open_negotiation(
         topic="timeout test",
         initiator_id="cc-t1",
-        peer_id="cc-t2",
+        participants=["cc-t2"],
         context="ctx",
     )
     initial = await store.read_latest(neg_id, "cc-t1", since_id="0")
@@ -239,7 +239,7 @@ async def test_wait_for_turn_returns_immediately_when_done(store):
     neg_id = await store.open_negotiation(
         topic="done test",
         initiator_id="cc-d1",
-        peer_id="cc-d2",
+        participants=["cc-d2"],
         context="ctx",
     )
 
@@ -262,7 +262,7 @@ async def test_read_latest_includes_accepting_hash(store):
     neg_id = await store.open_negotiation(
         topic="accepting_hash visibility test",
         initiator_id="cc-ah1",
-        peer_id="cc-ah2",
+        participants=["cc-ah2"],
         context="ctx",
     )
 
@@ -285,7 +285,7 @@ async def test_wait_for_turn_filters_self_turns(store):
     neg_id = await store.open_negotiation(
         topic="self-filter test",
         initiator_id="cc-sf1",
-        peer_id="cc-sf2",
+        participants=["cc-sf2"],
         context="ctx",
     )
 
@@ -318,7 +318,7 @@ async def test_cannot_post_to_closed_negotiation(store):
     neg_id = await store.open_negotiation(
         topic="closed post test",
         initiator_id="cc-i",
-        peer_id="cc-j",
+        participants=["cc-j"],
         context="ctx",
     )
 
@@ -341,7 +341,7 @@ async def test_single_accept_convergence(store):
     neg_id = await store.open_negotiation(
         topic="single accept test",
         initiator_id="cc-sa-a",
-        peer_id="cc-sa-b",
+        participants=["cc-sa-b"],
         context="testing single-accept",
     )
 
@@ -376,7 +376,7 @@ async def test_close_auto_fill_artifact(store):
     neg_id = await store.open_negotiation(
         topic="auto-fill artifact test",
         initiator_id="cc-af-a",
-        peer_id="cc-af-b",
+        participants=["cc-af-b"],
         context="testing auto-fill",
     )
 
@@ -425,7 +425,7 @@ async def test_round_count_in_post_position(store):
     neg_id = await store.open_negotiation(
         topic="round count test",
         initiator_id="cc-rc-a",
-        peer_id="cc-rc-b",
+        participants=["cc-rc-b"],
         context="ctx",
         max_rounds=5,
     )
@@ -463,7 +463,7 @@ async def test_get_artifact(store):
     neg_id = await store.open_negotiation(
         topic="get artifact test",
         initiator_id="cc-ga-a",
-        peer_id="cc-ga-b",
+        participants=["cc-ga-b"],
         context="ctx",
     )
 
@@ -509,7 +509,7 @@ async def test_join_negotiation(store):
     neg_id = await store.open_negotiation(
         topic="join test",
         initiator_id="cc-jn-a",
-        peer_id="cc-jn-b",
+        participants=["cc-jn-b"],
         context="initial context",
     )
 
@@ -549,7 +549,7 @@ async def test_soft_close_enforcement(store):
     neg_id = await store.open_negotiation(
         topic="soft close test",
         initiator_id="cc-sc-a",
-        peer_id="cc-sc-b",
+        participants=["cc-sc-b"],
         context="ctx",
     )
     r_a = await store.post_position(neg_id=neg_id, agent_id="cc-sc-a", content="proposal", status="proposing")
@@ -572,7 +572,7 @@ async def test_impasse_declared_at_max_rounds(store):
     neg_id = await store.open_negotiation(
         topic="impasse test",
         initiator_id="cc-imp-a",
-        peer_id="cc-imp-b",
+        participants=["cc-imp-b"],
         context="testing impasse detection",
         max_rounds=2,
     )
@@ -611,7 +611,7 @@ async def test_artifact_section_markers(store):
     neg_id = await store.open_negotiation(
         topic="marker extraction test",
         initiator_id="cc-mx-a",
-        peer_id="cc-mx-b",
+        participants=["cc-mx-b"],
         context="ctx",
     )
     r_a = await store.post_position(neg_id=neg_id, agent_id="cc-mx-a", content="proposal", status="proposing")
@@ -644,7 +644,7 @@ async def test_references_field(store):
     prior_id = await store.open_negotiation(
         topic="prior negotiation",
         initiator_id="cc-rf-a",
-        peer_id="cc-rf-b",
+        participants=["cc-rf-b"],
         context="ctx",
     )
 
@@ -652,7 +652,7 @@ async def test_references_field(store):
     neg_id = await store.open_negotiation(
         topic="follow-up negotiation",
         initiator_id="cc-rf-a",
-        peer_id="cc-rf-b",
+        participants=["cc-rf-b"],
         context="ctx",
         references=[prior_id],
     )
@@ -680,7 +680,7 @@ async def test_artifact_no_markers_unchanged(store):
     neg_id = await store.open_negotiation(
         topic="no marker test",
         initiator_id="cc-nm-a",
-        peer_id="cc-nm-b",
+        participants=["cc-nm-b"],
         context="ctx",
     )
     r_a = await store.post_position(neg_id=neg_id, agent_id="cc-nm-a", content="clean proposal", status="proposing")
@@ -693,3 +693,54 @@ async def test_artifact_no_markers_unchanged(store):
     result = await store.close_negotiation(neg_id=neg_id, agent_id="cc-nm-a", final_artifact="Clean content, no markers.")
     assert result["status"] == "closed"
     assert result["artifact_content"].startswith("Clean content, no markers.")
+
+
+async def test_three_party_convergence(store):
+    """N-party: all 3 agents must accept the same hash before convergence."""
+    neg_id = await store.open_negotiation(
+        topic="3-party TLS cert test",
+        initiator_id="cc-a",
+        participants=["cc-b", "cc-c"],
+        context="Testing 3-party convergence",
+    )
+
+    # cc-a proposes (auto-accepts own hash = 1/3) — not yet converged
+    r_a = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-a",
+        content="proposal text",
+        status="proposing",
+    )
+    proposal_hash = r_a["content_hash"]
+    assert not r_a["converged"], "Should not converge with only 1/3"
+
+    # cc-b accepts cc-a's hash (2/3) — not yet converged
+    r_b = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-b",
+        content="Accepted",
+        status="accepting",
+        accepting_hash=proposal_hash,
+    )
+    assert not r_b["converged"], "Should not converge with only 2/3"
+
+    # cc-c accepts cc-a's hash (3/3) — converged!
+    r_c = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-c",
+        content="Accepted",
+        status="accepting",
+        accepting_hash=proposal_hash,
+    )
+    assert r_c["converged"], "Should converge when all 3 accept the same hash"
+
+    status = await store.get_status(neg_id)
+    assert status["status"] == "converged"
+    assert status["converged_hash"] == proposal_hash
+    assert set(status["participants"]) == {"cc-a", "cc-b", "cc-c"}
+
+    # All 3 agents should appear in list_negotiations
+    for agent_id in ("cc-a", "cc-b", "cc-c"):
+        listing = await store.list_negotiations(agent_id)
+        ids = [n["negotiation_id"] for n in listing["negotiations"]]
+        assert neg_id in ids, f"{agent_id} should see the negotiation"

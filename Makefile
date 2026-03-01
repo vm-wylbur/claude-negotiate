@@ -4,7 +4,7 @@
 #
 # claude-negotiate/Makefile
 
-.PHONY: install test run deploy
+.PHONY: install test run deploy sync-skills
 
 install:
 	uv sync --extra dev
@@ -26,3 +26,8 @@ deploy:
 		uv run pytest tests/ -v"
 	ssh snowball "sudo systemctl restart claude-negotiate"
 	ssh snowball "sudo systemctl status claude-negotiate --no-pager"
+
+# Sync the negotiate skill to client machines
+sync-skills:
+	rsync -av skills/negotiate/ snowball:~/.claude/skills/negotiate/
+	rsync -av skills/negotiate/ scott:~/.claude/skills/negotiate/

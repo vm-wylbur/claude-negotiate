@@ -209,7 +209,7 @@ requires-dist = [
     { name = "fastmcp" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "redis", extras = ["asyncio"] },
+    { name = "redis" },
 ]
 provides-extras = ["dev"]
 

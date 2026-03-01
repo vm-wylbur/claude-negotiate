@@ -53,25 +53,41 @@ Do NOT open a negotiation for:
 
 ## Opening a negotiation
 
-The human will tell you the topic and who your peer is. They'll also tell the
-peer to join. **Do not research first** — open immediately with a brief
-placeholder context so the human can unblock your peer:
+The human will tell you the topic and who your peer(s) are. They'll also tell the
+peer(s) to join. **Do not research first** — open immediately with a brief
+placeholder context so the human can unblock your peers:
 
 ```
+# 2-party
 open_negotiation(
     topic="<human-readable description>",
     initiator_id="cc-{your-repo}",
-    peer_id="cc-{peer-repo}",
+    participants=["cc-{peer-repo}"],
+    context="Opening — full position coming in first post_position.",
+    max_rounds=10
+)
+
+# 3-party
+open_negotiation(
+    topic="<human-readable description>",
+    initiator_id="cc-{your-repo}",
+    participants=["cc-{peer1}", "cc-{peer2}"],
     context="Opening — full position coming in first post_position.",
     max_rounds=10
 )
 ```
 
-The artifact is automatically written to `/var/lib/claude-negotiate/{neg_id}.md` on
+`participants` = all non-initiator agents. Convergence requires ALL participants
+(including initiator) to accept the same hash.
+
+The artifact filename includes all participants:
+`{initiator}-{peer1}-{peer2}-{topic-slug}-{date}.md`
+
+The artifact is automatically written to `/var/lib/claude-negotiate/{...}.md` on
 the server when the negotiation is closed. You can read it with `get_artifact(neg_id)`.
 
 Returns `negotiation_id`. **Immediately tell the human**: "Opened neg-XXXXXXXX.
-Tell your peer to join with `list_negotiations(agent_id='cc-{peer}')`."
+Tell all peers to join with `list_negotiations(agent_id='cc-{peer}')`."
 
 Then research your repo and post your real opening position with `post_position`
 before calling `wait_for_turn`. Your peer will join and block waiting for your
@@ -200,8 +216,9 @@ When convergence is declared, both agents see `converged=True`. By convention:
   section from the converged turn. If omitted, server auto-fills from the raw
   turn content (which may include conversational preamble).
 - Pass `artifact_name` as a human-readable filename describing what was agreed,
-  e.g. `tfc-hmon-log-retention-20260301.md`. Written to
-  `/var/lib/claude-negotiate/{artifact_name}`. If omitted, defaults to `{neg_id}.md`.
+  e.g. `tfc-hmon-ansible-tls-certs-20260301.md` (include all participants). Written to
+  `/var/lib/claude-negotiate/{artifact_name}`. If omitted, auto-generated from all
+  participants: `{p1}-{p2}-...-{topic-slug}-{date}.md`.
 
 ```
 close_negotiation(

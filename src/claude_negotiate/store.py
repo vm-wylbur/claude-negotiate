@@ -61,11 +61,16 @@ class NegotiationStore:
             self._locks[neg_id] = asyncio.Lock()
         return self._locks[neg_id]
 
+    def _validate_participant(self, state: dict, agent_id: str) -> None:
+        all_p = state["participants"].split(",")
+        if agent_id not in all_p and agent_id != "human":
+            raise ValueError(f"{agent_id} not a participant")
+
     async def open_negotiation(
         self,
         topic: str,
         initiator_id: str,
-        peer_id: str,
+        participants: list[str],
         context: str,
         max_rounds: int = 10,
         references: list[str] | None = None,
@@ -73,6 +78,7 @@ class NegotiationStore:
         neg_id = f"neg-{uuid.uuid4().hex[:8]}"
         artifact_path = f"/var/lib/claude-negotiate/{neg_id}.md"
         self._locks[neg_id] = asyncio.Lock()
+        all_participants = [initiator_id] + participants
 
         async with self._r.pipeline() as pipe:
             pipe.hset(
@@ -80,7 +86,7 @@ class NegotiationStore:
                 mapping={
                     "topic": topic,
                     "initiator_id": initiator_id,
-                    "peer_id": peer_id,
+                    "participants": ",".join(all_participants),
                     "artifact_path": artifact_path,
                     "max_rounds": str(max_rounds),
                     "references": ",".join(references) if references else "",
@@ -89,10 +95,9 @@ class NegotiationStore:
                 },
             )
             pipe.expire(f"neg:{neg_id}:state", TTL)
-            pipe.sadd(f"pending:{initiator_id}", neg_id)
-            pipe.sadd(f"pending:{peer_id}", neg_id)
-            pipe.expire(f"pending:{initiator_id}", TTL)
-            pipe.expire(f"pending:{peer_id}", TTL)
+            for p in all_participants:
+                pipe.sadd(f"pending:{p}", neg_id)
+                pipe.expire(f"pending:{p}", TTL)
             pipe.xadd(
                 f"neg:{neg_id}",
                 {
@@ -168,13 +173,12 @@ class NegotiationStore:
                 await self._r.hset(
                     state_key, f"{agent_id}_accepting_hash", accepting_hash
                 )
-                initiator = state["initiator_id"]
-                peer = state["peer_id"]
-                other_id = peer if agent_id == initiator else initiator
-                other_hash = await self._r.hget(
-                    state_key, f"{other_id}_accepting_hash"
-                )
-                if other_hash and other_hash == accepting_hash:
+                updated_state = await self._r.hgetall(state_key)
+                all_participants = updated_state["participants"].split(",")
+                if all(
+                    updated_state.get(f"{p}_accepting_hash") == accepting_hash
+                    for p in all_participants
+                ):
                     await self._r.hset(
                         state_key,
                         mapping={
@@ -189,19 +193,17 @@ class NegotiationStore:
                 if turn_count > int(state["max_rounds"]) * 2:
                     await self._r.hset(state_key, "status", "impasse")
         else:
-            # Task 5: proposing/counter branch — auto-store self-accepting hash
-            # and check if the other agent already accepted this same hash
+            # proposing/counter branch — auto-store self-accepting hash
+            # and check if all other agents already accepted this same hash
             async with self._lock(neg_id):
                 entry_id = await self._r.xadd(stream_key, entry)
-                # Auto-store: proposer implicitly accepts their own proposal
                 await self._r.hset(state_key, f"{agent_id}_accepting_hash", ch)
-                initiator = state["initiator_id"]
-                peer = state["peer_id"]
-                other_id = peer if agent_id == initiator else initiator
-                other_hash = await self._r.hget(
-                    state_key, f"{other_id}_accepting_hash"
-                )
-                if other_hash and other_hash == ch:
+                updated_state = await self._r.hgetall(state_key)
+                all_participants = updated_state["participants"].split(",")
+                if all(
+                    updated_state.get(f"{p}_accepting_hash") == ch
+                    for p in all_participants
+                ):
                     await self._r.hset(
                         state_key,
                         mapping={
@@ -423,6 +425,8 @@ class NegotiationStore:
         result = {**state, "turn_count": turn_count, "negotiation_id": neg_id}
         refs_str = result.pop("references", "")
         result["references"] = [r for r in refs_str.split(",") if r]
+        parts_str = result.pop("participants", "")
+        result["participants"] = [p for p in parts_str.split(",") if p]
         return result
 
     async def list_negotiations(self, agent_id: str) -> dict:
@@ -437,7 +441,7 @@ class NegotiationStore:
                         "topic": state.get("topic", ""),
                         "status": state.get("status", ""),
                         "initiator_id": state.get("initiator_id", ""),
-                        "peer_id": state.get("peer_id", ""),
+                        "participants": [p for p in state.get("participants", "").split(",") if p],
                         "created_at": state.get("created_at", ""),
                         "references": [r for r in state.get("references", "").split(",") if r],
                     }
@@ -552,15 +556,17 @@ class NegotiationStore:
                 dt = _utcnow()
                 date = dt[:10].replace("-", "") + "T" + dt[11:16].replace(":", "")
                 slug = _topic_slug(state.get("topic", neg_id))
-                init = state["initiator_id"].removeprefix("cc-")
-                peer = state["peer_id"].removeprefix("cc-")
-                artifact_path = f"/var/lib/claude-negotiate/{init}-{peer}-{slug}-{date}.md"
+                all_participants = state["participants"].split(",")
+                parts = "-".join(p.removeprefix("cc-") for p in all_participants)
+                artifact_path = f"/var/lib/claude-negotiate/{parts}-{slug}-{date}.md"
 
             # Append provenance footer
             closed_at = _utcnow()
+            all_participants = state["participants"].split(",")
+            agreed_str = " × ".join(all_participants)
             footer = (
                 f"\n\n---\n"
-                f"Agreed: {state['initiator_id']} × {state['peer_id']}\n"
+                f"Agreed: {agreed_str}\n"
                 f"Negotiation: {neg_id}\n"
                 f"Closed by: {agent_id}\n"
                 f"Date: {closed_at}\n"
@@ -622,6 +628,7 @@ class NegotiationStore:
         ]
         last_id = entries[-1][0] if entries else "0"
         refs_str = state.get("references", "")
+        parts_str = state.get("participants", "")
         return {
             "negotiation_id": neg_id,
             "your_agent_id": agent_id,
@@ -634,5 +641,6 @@ class NegotiationStore:
             "converged_hash": state.get("converged_hash", ""),
             "last_id": last_id,
             "turns": turns,
+            "participants": [p for p in parts_str.split(",") if p],
             "references": [r for r in refs_str.split(",") if r],
         }

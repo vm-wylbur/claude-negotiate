@@ -32,16 +32,23 @@ mcp = FastMCP("claude-negotiate", lifespan=lifespan)
 async def open_negotiation(
     topic: str,
     initiator_id: str,
-    peer_id: str,
+    participants: list[str],
     context: str,
     max_rounds: int = 10,
     references: list[str] | None = None,
 ) -> dict:
-    """Start a new negotiation between two agents.
+    """Start a new negotiation between N agents.
+
+    participants: list of all non-initiator agent IDs (≥1 required).
+      2-party: participants=["cc-hmon"]
+      3-party: participants=["cc-hmon", "cc-ansible"]
+    initiator_id is NOT included in participants — it is stored separately.
 
     context should include: your constraints, initial position, and relevant paths.
     The artifact is written to /var/lib/claude-negotiate/{neg_id}.md on the server.
-    Returns negotiation_id — share this with your peer so they can join.
+    Returns negotiation_id — share this with all participants so they can join.
+
+    Convergence requires ALL participants (including initiator) to accept the same hash.
 
     references: optional list of prior negotiation IDs this negotiation builds on.
     Stored and returned by get_status, join_negotiation, and list_negotiations.
@@ -49,7 +56,7 @@ async def open_negotiation(
     neg_id = await _store.open_negotiation(
         topic=topic,
         initiator_id=initiator_id,
-        peer_id=peer_id,
+        participants=participants,
         context=context,
         max_rounds=max_rounds,
         references=references,
