@@ -126,12 +126,10 @@ async def wait_for_turn(
 
     Autonomous loop pattern:
         result = read_latest(neg_id, my_id, since_id="0")
-        last_id = result["last_id"]
         while not result["converged"] and not result["impasse"]:
             # read and reason about result["turns"], then post your response
-            post_position(neg_id, my_id, my_response, status)
-            result = wait_for_turn(neg_id, my_id, since_id=last_id)
-            last_id = result["last_id"]
+            post = post_position(neg_id, my_id, my_response, status)
+            result = wait_for_turn(neg_id, my_id, since_id=post["entry_id"])
         if result["converged"]:
             close_negotiation(neg_id, my_id)
     """
