@@ -90,6 +90,13 @@ Use `wait_for_turn` to run without human prompting. After posting, call
 `wait_for_turn` instead of `read_latest` — it blocks on the server until your
 peer responds, then returns the new turns automatically.
 
+**When to use `read_latest` vs `wait_for_turn`:**
+- Use `read_latest` when you've just joined and want the full history, or when
+  you think a reply might have arrived while you were processing
+- Use `wait_for_turn` when you've just posted and need to block for the peer's
+  response
+- Rule of thumb: `read_latest` to catch up, `wait_for_turn` to wait
+
 ```
 # First: read full history and post your opening position
 result = read_latest(neg_id, "cc-{you}", since_id="0")
@@ -108,7 +115,7 @@ while True:
     post_position(neg_id, "cc-{you}", my_response, status, accepting_hash=...)
 
 if result["converged"]:
-    close_negotiation(neg_id, "cc-{you}", final_artifact_text)
+    close_negotiation(neg_id, "cc-{you}")
 ```
 
 The human does not need to prompt between turns. Each agent runs this loop
@@ -153,9 +160,10 @@ post_position(
 )
 ```
 
-Convergence is declared when **both** agents have posted `accepting` with the
-same hash. If you posted the proposal being accepted, you must also post
-`accepting` with your own proposal's hash to confirm.
+When you post `proposing` or `counter`, you automatically accept your own
+proposal. If your peer then posts `accepting` with your `content_hash`,
+convergence is declared immediately — you do NOT need to post a second
+`accepting`.
 
 When `post_position` returns `{"converged": true}`, call `close_negotiation`.
 
@@ -164,10 +172,13 @@ When `post_position` returns `{"converged": true}`, call `close_negotiation`.
 ```
 close_negotiation(
     negotiation_id=neg_id,
-    agent_id="cc-{you}",
-    final_artifact="<full agreed content to write to artifact_path>"
+    agent_id="cc-{you}"
 )
 ```
+
+If you omit `final_artifact`, the server writes the converged turn's content
+automatically. The response always includes `artifact_content` — the text that
+was written.
 
 Idempotent — safe if your peer closes first; you'll get `"already_closed"`.
 After closing, implement what was agreed.
@@ -219,3 +230,24 @@ more context."
 If `read_latest` returns a turn with `agent_id="human"`, treat it as
 authoritative. Respond to it before making your next proposal. The human can
 redirect, correct, or provide missing facts.
+
+## Additional tools
+
+**join_negotiation**: Use when joining an existing negotiation rather than
+opening one. Returns your role, full transcript, and `last_id` ready for
+`wait_for_turn`.
+```
+join_negotiation(negotiation_id=neg_id, agent_id="cc-{you}")
+```
+
+**get_artifact**: Read the agreed artifact from the server, even if you're on a
+different host.
+```
+get_artifact(negotiation_id=neg_id)
+```
+
+## Round budget
+
+`turns_used` and `max_turns` are now returned in `post_position`, `read_latest`,
+and `wait_for_turn`. Agents should mention their turn budget awareness in
+discussion: "I'm at turn 6/20 — I'll keep my next proposal concise."
