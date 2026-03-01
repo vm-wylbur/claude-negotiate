@@ -108,6 +108,40 @@ async def read_latest(
 
 
 @mcp.tool()
+async def wait_for_turn(
+    negotiation_id: str,
+    agent_id: str,
+    since_id: str,
+    timeout_seconds: int = 60,
+) -> dict:
+    """Block until the peer posts a new turn, then return it.
+
+    Pass the last_id from your previous read_latest or wait_for_turn call.
+    Blocks on the server side (Redis XREAD BLOCK) — no polling needed.
+
+    Returns the same shape as read_latest. If timed_out=True, no new turns
+    arrived — call again to keep waiting. If converged or impasse, stop looping.
+
+    Autonomous loop pattern:
+        result = read_latest(neg_id, my_id, since_id="0")
+        last_id = result["last_id"]
+        while not result["converged"] and not result["impasse"]:
+            # read and reason about result["turns"], then post your response
+            post_position(neg_id, my_id, my_response, status)
+            result = wait_for_turn(neg_id, my_id, since_id=last_id)
+            last_id = result["last_id"]
+        if result["converged"]:
+            close_negotiation(neg_id, my_id, final_artifact)
+    """
+    return await _store.wait_for_turn(
+        neg_id=negotiation_id,
+        agent_id=agent_id,
+        since_id=since_id,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+@mcp.tool()
 async def update_context(
     negotiation_id: str,
     agent_id: str,

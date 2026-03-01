@@ -195,6 +195,72 @@ class NegotiationStore:
             "blocked_by": state.get("blocked_by", ""),
         }
 
+    async def wait_for_turn(
+        self,
+        neg_id: str,
+        agent_id: str,
+        since_id: str,
+        timeout_seconds: int = 60,
+    ) -> dict:
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        if not state:
+            raise ValueError(f"Negotiation {neg_id} not found")
+
+        # If already done, return immediately without blocking
+        if state["status"] not in ("open", "blocked"):
+            return {
+                "turns": [],
+                "last_id": since_id,
+                "negotiation_status": state["status"],
+                "converged": state["status"] == "converged",
+                "impasse": state["status"] == "impasse",
+                "timed_out": False,
+            }
+
+        # XREAD BLOCK: holds connection open until new entries arrive or timeout
+        result = await self._r.xread(
+            {f"neg:{neg_id}": since_id},
+            block=timeout_seconds * 1000,
+            count=20,
+        )
+
+        if not result:
+            # Timed out — re-read state in case it changed during the wait
+            state = await self._r.hgetall(f"neg:{neg_id}:state")
+            return {
+                "turns": [],
+                "last_id": since_id,
+                "negotiation_status": state["status"],
+                "converged": state["status"] == "converged",
+                "impasse": state["status"] == "impasse",
+                "timed_out": True,
+            }
+
+        entries = result[0][1]
+        turns = [
+            {
+                "id": entry_id,
+                "agent_id": fields["agent_id"],
+                "content": fields["content"],
+                "content_hash": fields["content_hash"],
+                "status": fields["status"],
+                "posted_at": fields.get("posted_at", ""),
+            }
+            for entry_id, fields in entries
+        ]
+        last_id = entries[-1][0]
+
+        # Re-read state after blocking — convergence may have been declared
+        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        return {
+            "turns": turns,
+            "last_id": last_id,
+            "negotiation_status": state["status"],
+            "converged": state["status"] == "converged",
+            "impasse": state["status"] == "impasse",
+            "timed_out": False,
+        }
+
     async def update_context(
         self, neg_id: str, agent_id: str, additional_context: str
     ) -> dict:

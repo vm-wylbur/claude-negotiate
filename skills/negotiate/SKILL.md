@@ -84,7 +84,37 @@ access. POSIX ACLs are available (ext4). My constraint: ntx processes write to
 this tree as ntx-user and cannot change ownership. Initial proposal: `setfacl
 -m u:tfcs-user:r-x /data/shared`."
 
-## Negotiation loop
+## Autonomous loop (preferred)
+
+Use `wait_for_turn` to run without human prompting. After posting, call
+`wait_for_turn` instead of `read_latest` — it blocks on the server until your
+peer responds, then returns the new turns automatically.
+
+```
+# First: read full history and post your opening position
+result = read_latest(neg_id, "cc-{you}", since_id="0")
+last_id = result["last_id"]
+post_position(neg_id, "cc-{you}", my_opening, "proposing")
+
+# Loop until done
+while True:
+    result = wait_for_turn(neg_id, "cc-{you}", since_id=last_id, timeout_seconds=120)
+    if result["timed_out"]:
+        continue  # peer is slow, keep waiting
+    last_id = result["last_id"]
+    if result["converged"] or result["impasse"]:
+        break
+    # read result["turns"], reason, then post your response
+    post_position(neg_id, "cc-{you}", my_response, status, accepting_hash=...)
+
+if result["converged"]:
+    close_negotiation(neg_id, "cc-{you}", final_artifact_text)
+```
+
+The human does not need to prompt between turns. Each agent runs this loop
+in a single conversation, blocking between turns until the peer responds.
+
+## Manual loop (fallback)
 
 1. Call `read_latest(negotiation_id, "cc-{you}", since_id="0")` on first turn,
    then pass back the returned `last_id` on every subsequent call.

@@ -4,6 +4,7 @@
 #
 # claude-negotiate/tests/test_store.py
 
+import asyncio
 import os
 
 import pytest
@@ -195,6 +196,77 @@ async def test_update_context_visible_in_stream(store):
     ctx_turns = [t for t in read["turns"] if t["status"] == "context_update"]
     assert len(ctx_turns) == 1
     assert "NFS" in ctx_turns[0]["content"]
+
+
+async def test_wait_for_turn_unblocks_on_peer_post(store):
+    """wait_for_turn blocks until peer posts, then returns immediately."""
+    neg_id = await store.open_negotiation(
+        topic="wait test",
+        initiator_id="cc-w1",
+        peer_id="cc-w2",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-wait.md",
+    )
+
+    # Get the last_id from the initial context entry
+    initial = await store.read_latest(neg_id, "cc-w1", since_id="0")
+    last_id = initial["last_id"]
+
+    # Start waiting in a concurrent task
+    wait_task = asyncio.create_task(
+        store.wait_for_turn(neg_id, "cc-w1", since_id=last_id, timeout_seconds=5)
+    )
+
+    await asyncio.sleep(0.1)  # let the block take hold
+
+    # Peer posts
+    await store.post_position(neg_id, "cc-w2", "hello from w2", "proposing")
+
+    result = await asyncio.wait_for(wait_task, timeout=3.0)
+    assert not result["timed_out"]
+    assert any(t["agent_id"] == "cc-w2" for t in result["turns"])
+
+
+async def test_wait_for_turn_times_out(store):
+    """wait_for_turn returns timed_out=True when no peer activity."""
+    neg_id = await store.open_negotiation(
+        topic="timeout test",
+        initiator_id="cc-t1",
+        peer_id="cc-t2",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-timeout.md",
+    )
+    initial = await store.read_latest(neg_id, "cc-t1", since_id="0")
+
+    result = await store.wait_for_turn(
+        neg_id, "cc-t1", since_id=initial["last_id"], timeout_seconds=2
+    )
+    assert result["timed_out"]
+    assert result["turns"] == []
+
+
+async def test_wait_for_turn_returns_immediately_when_done(store):
+    """wait_for_turn doesn't block if negotiation is already converged."""
+    neg_id = await store.open_negotiation(
+        topic="done test",
+        initiator_id="cc-d1",
+        peer_id="cc-d2",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-done.md",
+    )
+
+    r1 = await store.post_position(neg_id, "cc-d1", "proposal", "proposing")
+    h = r1["content_hash"]
+    await store.post_position(neg_id, "cc-d1", "accept", "accepting", accepting_hash=h)
+    r2 = await store.post_position(neg_id, "cc-d2", "accept", "accepting", accepting_hash=h)
+    assert r2["converged"]
+
+    final = await store.read_latest(neg_id, "cc-d2", since_id="0")
+    result = await store.wait_for_turn(
+        neg_id, "cc-d2", since_id=final["last_id"], timeout_seconds=10
+    )
+    assert result["converged"]
+    assert not result["timed_out"]
 
 
 async def test_cannot_post_to_closed_negotiation(store):
