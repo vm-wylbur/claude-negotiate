@@ -179,6 +179,7 @@ class NegotiationStore:
                 "content": fields["content"],
                 "content_hash": fields["content_hash"],
                 "status": fields["status"],
+                "accepting_hash": fields.get("accepting_hash", ""),  # Bug 3 fix
                 "posted_at": fields.get("posted_at", ""),
             }
             for entry_id, fields in entries
@@ -237,6 +238,22 @@ class NegotiationStore:
             }
 
         entries = result[0][1]
+
+        # Bug 1 fix: if any returned entry has status=="accepting", re-read state
+        # in a small retry loop to let the convergence write propagate.
+        if any(fields.get("status") == "accepting" for _, fields in entries):
+            for _ in range(3):
+                state = await self._r.hgetall(f"neg:{neg_id}:state")
+                if state.get("status") not in ("open", "blocked"):
+                    break
+                await asyncio.sleep(0.05)
+        else:
+            # Re-read state after blocking — convergence may have been declared
+            state = await self._r.hgetall(f"neg:{neg_id}:state")
+
+        # Bug 2 fix: filter out self-turns from the returned list, but track
+        # last_id across all entries (including self-turns) so we don't re-read.
+        last_id = entries[-1][0]
         turns = [
             {
                 "id": entry_id,
@@ -244,14 +261,18 @@ class NegotiationStore:
                 "content": fields["content"],
                 "content_hash": fields["content_hash"],
                 "status": fields["status"],
+                "accepting_hash": fields.get("accepting_hash", ""),  # Bug 3 fix
                 "posted_at": fields.get("posted_at", ""),
             }
             for entry_id, fields in entries
+            if fields["agent_id"] != agent_id
         ]
-        last_id = entries[-1][0]
 
-        # Re-read state after blocking — convergence may have been declared
-        state = await self._r.hgetall(f"neg:{neg_id}:state")
+        # If all returned entries were self-turns, keep blocking rather than
+        # returning empty — unless the negotiation is already done.
+        if not turns and state["status"] in ("open", "blocked"):
+            return await self.wait_for_turn(neg_id, agent_id, since_id=last_id, timeout_seconds=timeout_seconds)
+
         return {
             "turns": turns,
             "last_id": last_id,

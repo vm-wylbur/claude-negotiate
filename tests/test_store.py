@@ -269,6 +269,65 @@ async def test_wait_for_turn_returns_immediately_when_done(store):
     assert not result["timed_out"]
 
 
+async def test_read_latest_includes_accepting_hash(store):
+    """Bug 3: read_latest turns must include accepting_hash field."""
+    neg_id = await store.open_negotiation(
+        topic="accepting_hash visibility test",
+        initiator_id="cc-ah1",
+        peer_id="cc-ah2",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-ah.md",
+    )
+
+    r1 = await store.post_position(neg_id, "cc-ah1", "proposal", "proposing")
+    h = r1["content_hash"]
+    await store.post_position(neg_id, "cc-ah1", "accept", "accepting", accepting_hash=h)
+
+    read = await store.read_latest(neg_id, "cc-ah2", since_id="0")
+    # Every turn must have accepting_hash key
+    for turn in read["turns"]:
+        assert "accepting_hash" in turn, f"turn missing accepting_hash: {turn}"
+    # The accepting turn should carry the hash
+    accepting_turns = [t for t in read["turns"] if t["status"] == "accepting"]
+    assert len(accepting_turns) == 1
+    assert accepting_turns[0]["accepting_hash"] == h
+
+
+async def test_wait_for_turn_filters_self_turns(store):
+    """Bug 2: wait_for_turn must not return the caller's own turns."""
+    neg_id = await store.open_negotiation(
+        topic="self-filter test",
+        initiator_id="cc-sf1",
+        peer_id="cc-sf2",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-sf.md",
+    )
+
+    initial = await store.read_latest(neg_id, "cc-sf1", since_id="0")
+    last_id = initial["last_id"]
+
+    # cc-sf1 posts its own turn, then the peer posts
+    await store.post_position(neg_id, "cc-sf1", "self post", "proposing")
+
+    # Start waiting *from before the self-post* so it would normally catch it
+    wait_task = asyncio.create_task(
+        store.wait_for_turn(neg_id, "cc-sf1", since_id=last_id, timeout_seconds=5)
+    )
+
+    await asyncio.sleep(0.15)  # let the block take hold after self-turn passes
+
+    # Peer posts — this is what cc-sf1 should actually receive
+    await store.post_position(neg_id, "cc-sf2", "peer response", "counter")
+
+    result = await asyncio.wait_for(wait_task, timeout=4.0)
+    assert not result["timed_out"]
+    # Must not contain cc-sf1's own turn
+    self_turns = [t for t in result["turns"] if t["agent_id"] == "cc-sf1"]
+    assert self_turns == [], f"self-turns leaked: {self_turns}"
+    # Must contain the peer's turn
+    assert any(t["agent_id"] == "cc-sf2" for t in result["turns"])
+
+
 async def test_cannot_post_to_closed_negotiation(store):
     neg_id = await store.open_negotiation(
         topic="closed post test",
