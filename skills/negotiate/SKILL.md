@@ -195,20 +195,25 @@ When `post_position` returns `{"converged": true}`, call `close_negotiation`.
 When convergence is declared, both agents see `converged=True`. By convention:
 - **The initiator closes.** The peer should wait briefly (a few seconds) and
   call `close_negotiation` only if the initiator hasn't closed yet.
-- The closer controls artifact quality. Pass `final_artifact` with just the
-  agreed content (no preamble, no Q&A) — extract the relevant section from the
-  converged turn rather than letting the server auto-fill the raw turn content.
+- Pass `final_artifact` with just the agreed content — no preamble, no Q&A,
+  no turn metadata ("Turn 3/20", questions to the peer). Extract the relevant
+  section from the converged turn. If omitted, server auto-fills from the raw
+  turn content (which may include conversational preamble).
+- Pass `artifact_name` as a human-readable filename describing what was agreed,
+  e.g. `tfc-hmon-log-retention-20260301.md`. Written to
+  `/var/lib/claude-negotiate/{artifact_name}`. If omitted, defaults to `{neg_id}.md`.
 
 ```
 close_negotiation(
     negotiation_id=neg_id,
     agent_id="cc-{you}",
-    final_artifact="<extracted agreement section only>"
+    final_artifact="<extracted agreement section only>",
+    artifact_name="cc-tfc-cc-hmon-{topic-slug}-{YYYYMMDD}.md"
 )
 ```
 
-If you omit `final_artifact`, the server writes the converged turn's raw
-content — which may include conversational preamble.
+The server always appends a provenance footer (agreed-by, neg_id, date).
+`artifact_content` in the response includes the footer — confirm what was written.
 
 ## Closing
 

@@ -460,7 +460,11 @@ class NegotiationStore:
         return {"content_hash": ch, "acknowledged": True}
 
     async def close_negotiation(
-        self, neg_id: str, agent_id: str, final_artifact: str | None = None
+        self,
+        neg_id: str,
+        agent_id: str,
+        final_artifact: str | None = None,
+        artifact_name: str | None = None,
     ) -> dict:
         state_key = f"neg:{neg_id}:state"
         async with self._lock(neg_id):
@@ -483,7 +487,7 @@ class NegotiationStore:
                     f"Cannot close negotiation in status '{state['status']}'"
                 )
 
-            # Task 6: if final_artifact not provided, auto-fill from converged turn
+            # Auto-fill content from converged turn if not provided
             if final_artifact is None:
                 converged_hash = state.get("converged_hash", "")
                 if not converged_hash:
@@ -500,23 +504,40 @@ class NegotiationStore:
                     )
                 final_artifact = artifact_text
 
-            artifact_path = state["artifact_path"]
+            # Use semantic name if provided, otherwise keep the neg_id default
+            if artifact_name:
+                artifact_path = f"/var/lib/claude-negotiate/{artifact_name}"
+            else:
+                artifact_path = state["artifact_path"]
+
+            # Append provenance footer
+            closed_at = _utcnow()
+            footer = (
+                f"\n\n---\n"
+                f"Agreed: {state['initiator_id']} × {state['peer_id']}\n"
+                f"Negotiation: {neg_id}\n"
+                f"Closed by: {agent_id}\n"
+                f"Date: {closed_at}\n"
+            )
+            full_content = final_artifact + footer
+
             p = Path(artifact_path)
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(final_artifact)
+            p.write_text(full_content)
 
             await self._r.hset(
                 state_key,
                 mapping={
                     "status": "closed",
                     "closed_by": agent_id,
-                    "closed_at": _utcnow(),
+                    "closed_at": closed_at,
+                    "artifact_path": artifact_path,
                 },
             )
         return {
             "status": "closed",
             "artifact_path": artifact_path,
-            "artifact_content": final_artifact,
+            "artifact_content": full_content,
         }
 
     async def get_artifact(self, neg_id: str) -> dict:

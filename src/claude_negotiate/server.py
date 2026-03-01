@@ -200,21 +200,27 @@ async def close_negotiation(
     negotiation_id: str,
     agent_id: str,
     final_artifact: str | None = None,
+    artifact_name: str | None = None,
 ) -> dict:
     """Close a converged negotiation and write the agreed artifact to disk.
 
     Only callable after convergence (both agents accepted the same hash).
     Idempotent: if already closed, returns status='already_closed'.
 
-    final_artifact: the agreed content to write to artifact_path. If omitted,
-    the server auto-fills it from the converged turn's content in the stream.
+    final_artifact: the agreed content (clean, no preamble). If omitted,
+    the server auto-fills from the converged turn's raw content.
 
-    Returns artifact_content so you can confirm what was written.
+    artifact_name: a human-readable filename, e.g. 'tfc-hmon-log-retention-20260301.md'.
+    Written to /var/lib/claude-negotiate/{artifact_name}. If omitted, uses {neg_id}.md.
+
+    The server always appends a provenance footer (agreed-by, neg_id, date).
+    Returns artifact_content (including footer) so you can confirm what was written.
     """
     return await _store.close_negotiation(
         neg_id=negotiation_id,
         agent_id=agent_id,
         final_artifact=final_artifact,
+        artifact_name=artifact_name,
     )
 
 

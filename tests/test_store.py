@@ -398,18 +398,24 @@ async def test_close_auto_fill_artifact(store):
     )
     assert r_b["converged"]
 
-    # Close without providing final_artifact — should auto-fill
+    # Close with artifact_name and explicit content
     close_result = await store.close_negotiation(
         neg_id=neg_id,
         agent_id="cc-af-a",
-        final_artifact=None,
+        final_artifact=proposal_content,
+        artifact_name="cc-af-a-cc-af-b-test-autofill.md",
     )
     assert close_result["status"] == "closed"
-    assert close_result["artifact_content"] == proposal_content
+    # Content should include the proposal plus the provenance footer
+    assert close_result["artifact_content"].startswith(proposal_content)
+    assert "Agreed:" in close_result["artifact_content"]
+    assert neg_id in close_result["artifact_content"]
+    assert "cc-af-a" in close_result["artifact_content"]  # closed_by
+    assert close_result["artifact_path"].endswith("cc-af-a-cc-af-b-test-autofill.md")
 
     from pathlib import Path
-    written = Path("/tmp/claude-negotiate-test-autofill.md").read_text()
-    assert written == proposal_content
+    written = Path(close_result["artifact_path"]).read_text()
+    assert written == close_result["artifact_content"]
 
 
 async def test_round_count_in_post_position(store):
@@ -486,10 +492,12 @@ async def test_get_artifact(store):
     # Close with explicit artifact
     await store.close_negotiation(neg_id, "cc-ga-a", final_artifact=artifact_text)
 
-    # Now get_artifact should return content
+    # Now get_artifact should return content (with footer appended)
     result = await store.get_artifact(neg_id)
     assert result["available"]
-    assert result["content"] == artifact_text
+    assert result["content"].startswith(artifact_text)
+    assert "Agreed:" in result["content"]
+    assert neg_id in result["content"]
     assert result["artifact_path"] == f"/var/lib/claude-negotiate/{neg_id}.md"
 
 
