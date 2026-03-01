@@ -31,6 +31,18 @@ def _topic_slug(topic: str) -> str:
     return slug[:40]
 
 
+def _extract_artifact_section(content: str) -> str:
+    """Extract content between <!-- artifact-start --> and <!-- artifact-end --> markers.
+    If markers not found, returns the original content unchanged."""
+    start_marker = "<!-- artifact-start -->"
+    end_marker = "<!-- artifact-end -->"
+    start_idx = content.find(start_marker)
+    end_idx = content.find(end_marker)
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        return content[start_idx + len(start_marker):end_idx].strip()
+    return content
+
+
 class NegotiationStore:
     def __init__(self, redis_url: str):
         self._redis_url = redis_url
@@ -547,6 +559,7 @@ class NegotiationStore:
                 f"Closed by: {agent_id}\n"
                 f"Date: {closed_at}\n"
             )
+            final_artifact = _extract_artifact_section(final_artifact)
             full_content = final_artifact + footer
 
             p = Path(artifact_path)

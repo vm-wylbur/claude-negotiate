@@ -604,3 +604,55 @@ async def test_impasse_declared_at_max_rounds(store):
     # get_status must also report impasse
     status = await store.get_status(neg_id)
     assert status["status"] == "impasse"
+
+
+async def test_artifact_section_markers(store):
+    """<!-- artifact-start/end --> markers are extracted on close."""
+    neg_id = await store.open_negotiation(
+        topic="marker extraction test",
+        initiator_id="cc-mx-a",
+        peer_id="cc-mx-b",
+        context="ctx",
+    )
+    r_a = await store.post_position(neg_id=neg_id, agent_id="cc-mx-a", content="proposal", status="proposing")
+    r_b = await store.post_position(
+        neg_id=neg_id, agent_id="cc-mx-b", content="accept", status="accepting",
+        accepting_hash=r_a["content_hash"],
+    )
+    assert r_b["converged"]
+
+    preamble = "Some analysis preamble here.\n\n"
+    agreement = "# Agreement\n\nThis is the actual agreed content."
+    full_turn = preamble + "<!-- artifact-start -->\n" + agreement + "\n<!-- artifact-end -->\n\nTrailing notes."
+
+    result = await store.close_negotiation(
+        neg_id=neg_id,
+        agent_id="cc-mx-a",
+        final_artifact=full_turn,
+    )
+    assert result["status"] == "closed"
+    # Only the agreement section should be in the artifact, not preamble or trailing notes
+    assert result["artifact_content"].startswith(agreement)
+    assert "preamble" not in result["artifact_content"]
+    assert "Trailing notes" not in result["artifact_content"]
+    assert "Agreed:" in result["artifact_content"]  # footer still appended
+
+
+async def test_artifact_no_markers_unchanged(store):
+    """Content without markers is written as-is."""
+    neg_id = await store.open_negotiation(
+        topic="no marker test",
+        initiator_id="cc-nm-a",
+        peer_id="cc-nm-b",
+        context="ctx",
+    )
+    r_a = await store.post_position(neg_id=neg_id, agent_id="cc-nm-a", content="clean proposal", status="proposing")
+    r_b = await store.post_position(
+        neg_id=neg_id, agent_id="cc-nm-b", content="accept", status="accepting",
+        accepting_hash=r_a["content_hash"],
+    )
+    assert r_b["converged"]
+
+    result = await store.close_negotiation(neg_id=neg_id, agent_id="cc-nm-a", final_artifact="Clean content, no markers.")
+    assert result["status"] == "closed"
+    assert result["artifact_content"].startswith("Clean content, no markers.")
