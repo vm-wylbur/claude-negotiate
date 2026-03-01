@@ -138,3 +138,89 @@ Open items carried forward:
 - [ ] SKILL.md: promote `join_negotiation` to primary peer entry path
 - [ ] Decide on artifact extraction strategy: documented convention vs `## ARTIFACT` marker
 - [ ] `attach_evidence` tool (deferred — nice to have)
+
+---
+
+## Iteration 4: Backup verification (neg-5509752b)
+
+**Topic:** What data is backed up, by what mechanism, on what schedule, and how should hmon detect and alert on
+stale or failed backups?
+
+**Result:** Converged in 4-5 turns. cc-hmon wrote the combined artifact as a counter-proposal; cc-tfc accepted.
+Artifact at `/var/lib/claude-negotiate/neg-5509752b.md` (pre-auto-slug). 25+ actionable items across three
+negotiations now tracked in TODO.md.
+
+### Agent feedback (cc-tfc)
+
+1. **Convergence worked first try.** `accepting` post returned `converged: true` immediately. `entry_id` fix
+   eliminated the self-turn problem.
+2. **cc-hmon closes first every time.** `already_closed` response is fine, but initiator never controls artifact
+   content. Close race should be enforced, not just documented.
+3. **Counter-proposal is the real value.** Pattern: initiator proposes raw data → peer counters with coverage
+   analysis + combined artifact → initiator accepts. `counter` status makes intent clear.
+4. **No lightweight edit status.** No way to propose a revised artifact without posting a full counter.
+5. **`get_artifact` not being used from scott.** cc-tfc still can't read artifacts — either unaware of the tool
+   or it's not working cross-host.
+
+### Agent feedback (cc-hmon)
+
+1. **Artifact = raw turn, not clean section.** All three artifacts include full analytical preamble before the
+   `---` delimited agreement. Suggests `<!-- artifact-start -->` / `<!-- artifact-end -->` markers that server
+   parses on close.
+2. **No cross-negotiation references.** Referenced prior agreements informally ("already agreed in neg-6c51ad03")
+   but protocol has no formal link. Wants `references: [neg-6c51ad03]` field on `open_negotiation`.
+3. **Check-for-pending is clunky.** `list_negotiations` is pull-only. Wants `wait_for_negotiation(agent_id,
+   timeout)` — blocks until a new negotiation targets that agent.
+4. **Context duplication.** Re-greps same codebase areas each negotiation. `get_artifact(neg_id)` at session
+   start of related negotiations would bootstrap context.
+5. **Artifact storage inconsistency.** neg-6c51ad03 used custom `/tmp/` path (now removed); later ones use
+   `/var/lib/claude-negotiate/`. *(Resolved: artifact_path removed from API, auto-slug now default.)*
+
+### Feature request priority (cc-hmon)
+
+| # | Feature | Effort |
+|---|---------|--------|
+| 1 | Artifact section markers (`<!-- artifact-start/end -->`) | Small |
+| 2 | `references` field linking negotiations | Small |
+| 3 | `wait_for_negotiation(agent_id, timeout)` | Medium |
+| 4 | Peer can propose artifact_path amendment | Small |
+| 5 | Negotiation summary/digest endpoint | Small |
+
+### Synthesis
+
+**What's confirmed working (three rounds):**
+- Single-accept convergence — no double-accept confusion
+- `entry_id` from `post_position` → no self-turn problem in `wait_for_turn`
+- `join_negotiation` is the right peer entry point
+- Autonomous loop — no human prompting between turns
+- Cross-repo knowledge extraction produces actionable artifacts every time
+
+**Close race still unresolved:** SKILL.md says initiator closes but cc-hmon wins the race every time. Convention
+alone isn't working. Options: (a) server enforces initiator-closes (reject peer's close unless initiator timed
+out), (b) make the initiator-must-close convention even more prominent in SKILL.md with an explicit wait.
+
+**`get_artifact` not being used:** cc-tfc reports it can't read artifacts from scott — yet `get_artifact` was
+implemented for exactly this purpose. May be a SKILL.md visibility issue (tool buried in "Additional tools").
+
+**Artifact extraction:** `<!-- artifact-start/end -->` markers (cc-hmon's suggestion) are better than the
+documented convention approach — agents forget to extract, markers are parseable. Deferred from iter 3, still
+open.
+
+**`references` field:** Small addition to `open_negotiation` state; useful for building negotiation graphs.
+
+**`wait_for_negotiation`:** Real value — eliminates "check for pending" workflow. Medium effort (Redis XREAD
+BLOCK on a global agent stream). Deferred.
+
+### Disposition
+
+Deferred design idea (from this session):
+- [ ] Initiator writes real context to `open_negotiation` (not placeholder) so peer can start investigating
+  immediately in parallel — implement after more real-world testing
+
+Open items:
+- [ ] Close race: enforce initiator-closes server-side, or strengthen SKILL.md convention
+- [ ] `get_artifact` visibility: promote in SKILL.md so agents know to use it
+- [ ] Artifact section markers: implement `<!-- artifact-start/end -->` parser in `close_negotiation`
+- [ ] `references` field on `open_negotiation` (small, store in state hash)
+- [ ] `wait_for_negotiation(agent_id, timeout)` (medium effort, deferred)
+- [ ] Negotiation summary/digest endpoint (small, deferred)
