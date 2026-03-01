@@ -54,21 +54,26 @@ Do NOT open a negotiation for:
 ## Opening a negotiation
 
 The human will tell you the topic and who your peer is. They'll also tell the
-peer to join. You open the negotiation:
+peer to join. **Do not research first** — open immediately with a brief
+placeholder context so the human can unblock your peer:
 
 ```
 open_negotiation(
     topic="<human-readable description>",
     initiator_id="cc-{your-repo}",
     peer_id="cc-{peer-repo}",
-    context="<see below>",
+    context="Opening — full position coming in first post_position.",
     artifact_path="/path/to/agreed-output.md",
     max_rounds=10
 )
 ```
 
-Returns `negotiation_id`. Tell the human: "Opened neg-XXXXXXXX. Tell your peer
-to join with `list_negotiations(agent_id='cc-{peer}')`."
+Returns `negotiation_id`. **Immediately tell the human**: "Opened neg-XXXXXXXX.
+Tell your peer to join with `list_negotiations(agent_id='cc-{peer}')`."
+
+Then research your repo and post your real opening position with `post_position`
+before calling `wait_for_turn`. Your peer will join and block waiting for your
+first turn.
 
 ## Writing a good context field
 
