@@ -514,7 +514,8 @@ class NegotiationStore:
             if artifact_name:
                 artifact_path = f"/var/lib/claude-negotiate/{artifact_name}"
             else:
-                date = _utcnow()[:10].replace("-", "")
+                dt = _utcnow()
+                date = dt[:10].replace("-", "") + "T" + dt[11:16].replace(":", "")
                 slug = _topic_slug(state.get("topic", neg_id))
                 init = state["initiator_id"].removeprefix("cc-")
                 peer = state["peer_id"].removeprefix("cc-")
