@@ -116,7 +116,7 @@ class NegotiationStore:
         }
 
         if status == "blocked":
-            await self._r.xadd(stream_key, entry)
+            entry_id = await self._r.xadd(stream_key, entry)
             await self._r.hset(
                 state_key, mapping={"status": "blocked", "blocked_by": agent_id}
             )
@@ -133,6 +133,7 @@ class NegotiationStore:
                 "blocked": True,
                 "turns_used": turns_used,
                 "max_turns": max_turns,
+                "entry_id": entry_id,
             }
 
         # Clear blocked status when the blocking agent resumes
@@ -140,9 +141,10 @@ class NegotiationStore:
             await self._r.hset(state_key, "status", "open")
 
         converged = False
+        entry_id = None
         if status == "accepting" and accepting_hash:
             async with self._lock(neg_id):
-                await self._r.xadd(stream_key, entry)
+                entry_id = await self._r.xadd(stream_key, entry)
                 await self._r.hset(
                     state_key, f"{agent_id}_accepting_hash", accepting_hash
                 )
@@ -169,7 +171,7 @@ class NegotiationStore:
             # Task 5: proposing/counter branch — auto-store self-accepting hash
             # and check if the other agent already accepted this same hash
             async with self._lock(neg_id):
-                await self._r.xadd(stream_key, entry)
+                entry_id = await self._r.xadd(stream_key, entry)
                 # Auto-store: proposer implicitly accepts their own proposal
                 await self._r.hset(state_key, f"{agent_id}_accepting_hash", ch)
                 initiator = state["initiator_id"]
@@ -206,6 +208,7 @@ class NegotiationStore:
             "blocked": False,
             "turns_used": turns_used,
             "max_turns": max_turns,
+            "entry_id": entry_id,
         }
 
     async def read_latest(

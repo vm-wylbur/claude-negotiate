@@ -42,6 +42,7 @@ async def test_full_negotiation(store):
         status="proposing",
     )
     assert not r1["converged"]
+    assert r1["entry_id"]
 
     # cc-tfcs reads and counters
     read1 = await store.read_latest(neg_id, "cc-tfcs", since_id="0")
@@ -55,6 +56,7 @@ async def test_full_negotiation(store):
     )
     counter_hash = r2["content_hash"]
     assert not r2["converged"]
+    assert r2["entry_id"]
 
     # cc-ntx reads counter and accepts it
     read2 = await store.read_latest(neg_id, "cc-ntx", since_id=read1["last_id"])
@@ -70,6 +72,7 @@ async def test_full_negotiation(store):
     # Task 5: cc-tfcs auto-stored its own counter hash when posting,
     # so when cc-ntx accepts that hash, convergence fires immediately.
     assert r3["converged"]
+    assert r3["entry_id"]
 
     # Verify status
     status = await store.get_status(neg_id)
@@ -151,6 +154,7 @@ async def test_blocked_and_resume(store):
         status="blocked",
     )
     assert r["blocked"]
+    assert r["entry_id"]
 
     status = await store.get_status(neg_id)
     assert status["status"] == "blocked"
