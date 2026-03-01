@@ -166,6 +166,7 @@ class NegotiationStore:
                         mapping={
                             "status": "converged",
                             "converged_hash": accepting_hash,
+                            "converged_at": _utcnow(),
                         },
                     )
                     converged = True
@@ -192,6 +193,7 @@ class NegotiationStore:
                         mapping={
                             "status": "converged",
                             "converged_hash": ch,
+                            "converged_at": _utcnow(),
                         },
                     )
                     converged = True
@@ -492,6 +494,21 @@ class NegotiationStore:
                 raise ValueError(
                     f"Cannot close negotiation in status '{state['status']}'"
                 )
+
+            # Soft close: if caller is peer (not initiator), defer to initiator for 60s
+            if agent_id != state["initiator_id"] and agent_id != state.get("closed_by", ""):
+                converged_at_str = state.get("converged_at", "")
+                if converged_at_str:
+                    converged_at = datetime.fromisoformat(converged_at_str)
+                    elapsed = (datetime.now(timezone.utc) - converged_at).total_seconds()
+                    if elapsed < 60:
+                        return {
+                            "status": "initiator_should_close",
+                            "initiator_id": state["initiator_id"],
+                            "converged_at": converged_at_str,
+                            "elapsed_seconds": int(elapsed),
+                            "message": f"Initiator should close. {int(60 - elapsed)}s remaining before peer can force-close.",
+                        }
 
             # Auto-fill content from converged turn if not provided
             if final_artifact is None:

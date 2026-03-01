@@ -542,6 +542,29 @@ async def test_join_negotiation(store):
     assert result_a["converged_hash"] == ""
 
 
+async def test_soft_close_enforcement(store):
+    """Peer gets initiator_should_close within 60s of convergence."""
+    neg_id = await store.open_negotiation(
+        topic="soft close test",
+        initiator_id="cc-sc-a",
+        peer_id="cc-sc-b",
+        context="ctx",
+    )
+    r_a = await store.post_position(neg_id=neg_id, agent_id="cc-sc-a", content="proposal", status="proposing")
+    r_b = await store.post_position(neg_id=neg_id, agent_id="cc-sc-b", content="accept", status="accepting", accepting_hash=r_a["content_hash"])
+    assert r_b["converged"]
+
+    # Peer tries to close immediately — should be deferred
+    result = await store.close_negotiation(neg_id, "cc-sc-b")
+    assert result["status"] == "initiator_should_close"
+    assert result["initiator_id"] == "cc-sc-a"
+    assert "elapsed_seconds" in result
+
+    # Initiator closes — should succeed
+    result2 = await store.close_negotiation(neg_id, "cc-sc-a", final_artifact="agreed content")
+    assert result2["status"] == "closed"
+
+
 async def test_impasse_declared_at_max_rounds(store):
     """Fix 2: impasse is declared when turn count exceeds max_rounds * 2."""
     neg_id = await store.open_negotiation(
