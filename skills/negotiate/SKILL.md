@@ -229,6 +229,20 @@ The response always includes `artifact_content` — the text that was written.
 Idempotent — safe if your peer closes first; you'll get `"already_closed"`.
 After closing, implement what was agreed.
 
+## Reading artifacts remotely
+
+After a negotiation closes, the artifact lives on the server. If you're on a
+different host (e.g. scott reading an artifact written on snowball), use
+`get_artifact` — do not scp or rsync:
+
+```
+get_artifact(negotiation_id=neg_id)
+```
+
+Returns `available=True` and `content` once the negotiation is closed.
+The `close_negotiation` response also includes a `tip` field with the exact
+call to use.
+
 ## When to post blocked
 
 Post `status="blocked"` when you cannot proceed without a fact you cannot

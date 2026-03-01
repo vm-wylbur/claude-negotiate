@@ -566,6 +566,7 @@ class NegotiationStore:
             "status": "closed",
             "artifact_path": artifact_path,
             "artifact_content": full_content,
+            "tip": f"Your peer can read this artifact with get_artifact(negotiation_id='{neg_id}').",
         }
 
     async def get_artifact(self, neg_id: str) -> dict:

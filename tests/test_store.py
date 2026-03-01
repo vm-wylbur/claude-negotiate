@@ -406,6 +406,8 @@ async def test_close_auto_fill_artifact(store):
         artifact_name="cc-af-a-cc-af-b-test-autofill.md",
     )
     assert close_result["status"] == "closed"
+    assert "tip" in close_result
+    assert "get_artifact" in close_result["tip"]
     # Content should include the proposal plus the provenance footer
     assert close_result["artifact_content"].startswith(proposal_content)
     assert "Agreed:" in close_result["artifact_content"]
