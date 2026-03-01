@@ -67,17 +67,9 @@ async def test_full_negotiation(store):
         status="accepting",
         accepting_hash=counter_turn["content_hash"],
     )
-    assert not r3["converged"]  # only one agent accepted so far
-
-    # cc-tfcs also accepts its own counter (confirming the agreed text)
-    r4 = await store.post_position(
-        neg_id=neg_id,
-        agent_id="cc-tfcs",
-        content="Confirmed",
-        status="accepting",
-        accepting_hash=counter_hash,
-    )
-    assert r4["converged"]
+    # Task 5: cc-tfcs auto-stored its own counter hash when posting,
+    # so when cc-ntx accepts that hash, convergence fires immediately.
+    assert r3["converged"]
 
     # Verify status
     status = await store.get_status(neg_id)
@@ -257,7 +249,7 @@ async def test_wait_for_turn_returns_immediately_when_done(store):
 
     r1 = await store.post_position(neg_id, "cc-d1", "proposal", "proposing")
     h = r1["content_hash"]
-    await store.post_position(neg_id, "cc-d1", "accept", "accepting", accepting_hash=h)
+    # Task 5: cc-d1 auto-accepts its own proposal, so cc-d2 accepting converges immediately
     r2 = await store.post_position(neg_id, "cc-d2", "accept", "accepting", accepting_hash=h)
     assert r2["converged"]
 
@@ -337,10 +329,9 @@ async def test_cannot_post_to_closed_negotiation(store):
         artifact_path="/tmp/claude-negotiate-test-closed.md",
     )
 
-    # Converge quickly
+    # Converge quickly: cc-i proposes (auto-accepts), cc-j accepts → converge
     r1 = await store.post_position(neg_id, "cc-i", "proposal", "proposing")
     h = r1["content_hash"]
-    await store.post_position(neg_id, "cc-i", "accept", "accepting", accepting_hash=h)
     r2 = await store.post_position(neg_id, "cc-j", "accept", "accepting", accepting_hash=h)
     assert r2["converged"]
 
@@ -348,3 +339,207 @@ async def test_cannot_post_to_closed_negotiation(store):
 
     with pytest.raises(ValueError, match="closed"):
         await store.post_position(neg_id, "cc-j", "too late", "proposing")
+
+
+# ---- New tests for Tasks 5-9 ----
+
+async def test_single_accept_convergence(store):
+    """Task 5: B proposes, A accepts → converge without B needing a second accept call."""
+    neg_id = await store.open_negotiation(
+        topic="single accept test",
+        initiator_id="cc-sa-a",
+        peer_id="cc-sa-b",
+        context="testing single-accept",
+        artifact_path="/tmp/claude-negotiate-test-sa.md",
+    )
+
+    # B (peer) proposes — auto-stores cc-sa-b_accepting_hash = ch
+    r_b = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-sa-b",
+        content="B's proposal text",
+        status="proposing",
+    )
+    proposal_hash = r_b["content_hash"]
+    assert not r_b["converged"]
+
+    # A accepts B's proposal — should match B's auto-stored hash → converge
+    r_a = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-sa-a",
+        content="Accepted",
+        status="accepting",
+        accepting_hash=proposal_hash,
+    )
+    assert r_a["converged"], "Should converge in single round-trip"
+
+    status = await store.get_status(neg_id)
+    assert status["status"] == "converged"
+    assert status["converged_hash"] == proposal_hash
+
+
+async def test_close_auto_fill_artifact(store):
+    """Task 6: close without final_artifact auto-fills from converged turn content."""
+    proposal_content = "The agreed text for this negotiation."
+    neg_id = await store.open_negotiation(
+        topic="auto-fill artifact test",
+        initiator_id="cc-af-a",
+        peer_id="cc-af-b",
+        context="testing auto-fill",
+        artifact_path="/tmp/claude-negotiate-test-autofill.md",
+    )
+
+    # A proposes (auto-accepts), B accepts → converge
+    r_a = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-af-a",
+        content=proposal_content,
+        status="proposing",
+    )
+    proposal_hash = r_a["content_hash"]
+
+    r_b = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-af-b",
+        content="Accepted",
+        status="accepting",
+        accepting_hash=proposal_hash,
+    )
+    assert r_b["converged"]
+
+    # Close without providing final_artifact — should auto-fill
+    close_result = await store.close_negotiation(
+        neg_id=neg_id,
+        agent_id="cc-af-a",
+        final_artifact=None,
+    )
+    assert close_result["status"] == "closed"
+    assert close_result["artifact_content"] == proposal_content
+
+    from pathlib import Path
+    written = Path("/tmp/claude-negotiate-test-autofill.md").read_text()
+    assert written == proposal_content
+
+
+async def test_round_count_in_post_position(store):
+    """Task 7: post_position response includes turns_used and max_turns."""
+    neg_id = await store.open_negotiation(
+        topic="round count test",
+        initiator_id="cc-rc-a",
+        peer_id="cc-rc-b",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-rc.md",
+        max_rounds=5,
+    )
+
+    r1 = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-rc-a",
+        content="first proposal",
+        status="proposing",
+    )
+    assert "turns_used" in r1, "turns_used missing from post_position response"
+    assert "max_turns" in r1, "max_turns missing from post_position response"
+    assert r1["max_turns"] == 10  # 5 rounds * 2
+    # Stream has: 1 context entry + 1 proposal = 2
+    assert r1["turns_used"] == 2
+
+    r2 = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-rc-b",
+        content="counter",
+        status="counter",
+    )
+    assert r2["turns_used"] == 3
+
+    # read_latest also has round count
+    read = await store.read_latest(neg_id, "cc-rc-a", since_id="0")
+    assert "turns_used" in read
+    assert "max_turns" in read
+    assert read["max_turns"] == 10
+
+
+async def test_get_artifact(store):
+    """Task 8: get_artifact returns content after open+converge+close."""
+    artifact_text = "# Final agreed document\n\nContent here.\n"
+    neg_id = await store.open_negotiation(
+        topic="get artifact test",
+        initiator_id="cc-ga-a",
+        peer_id="cc-ga-b",
+        context="ctx",
+        artifact_path="/tmp/claude-negotiate-test-ga.md",
+    )
+
+    # Before convergence: not available
+    pre = await store.get_artifact(neg_id)
+    assert not pre["available"]
+
+    # Converge: A proposes (auto-accepts), B accepts
+    r_a = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-ga-a",
+        content="proposal",
+        status="proposing",
+    )
+    r_b = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-ga-b",
+        content="accept",
+        status="accepting",
+        accepting_hash=r_a["content_hash"],
+    )
+    assert r_b["converged"]
+
+    # After converge but before close: file not written yet
+    mid = await store.get_artifact(neg_id)
+    assert not mid["available"]
+
+    # Close with explicit artifact
+    await store.close_negotiation(neg_id, "cc-ga-a", final_artifact=artifact_text)
+
+    # Now get_artifact should return content
+    result = await store.get_artifact(neg_id)
+    assert result["available"]
+    assert result["content"] == artifact_text
+    assert result["artifact_path"] == "/tmp/claude-negotiate-test-ga.md"
+
+
+async def test_join_negotiation(store):
+    """Task 9: join_negotiation returns correct role, last_id, turn count."""
+    neg_id = await store.open_negotiation(
+        topic="join test",
+        initiator_id="cc-jn-a",
+        peer_id="cc-jn-b",
+        context="initial context",
+        artifact_path="/tmp/claude-negotiate-test-jn.md",
+    )
+
+    # Post a turn so there's something in the stream
+    await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-jn-a",
+        content="first proposal",
+        status="proposing",
+    )
+
+    # Initiator joins
+    result_a = await store.join_negotiation(neg_id, "cc-jn-a")
+    assert result_a["role"] == "initiator"
+    assert result_a["your_agent_id"] == "cc-jn-a"
+    assert result_a["topic"] == "join test"
+    assert result_a["negotiation_status"] == "open"
+    assert result_a["turns_used"] == 2  # context + proposal
+    assert result_a["max_turns"] == 20  # 10 rounds * 2
+    assert len(result_a["turns"]) == 2
+    assert result_a["last_id"] != "0"
+
+    # Peer joins
+    result_b = await store.join_negotiation(neg_id, "cc-jn-b")
+    assert result_b["role"] == "peer"
+    assert result_b["your_agent_id"] == "cc-jn-b"
+    assert result_b["turns_used"] == 2
+    # last_id matches between both
+    assert result_a["last_id"] == result_b["last_id"]
+
+    # converged_hash is empty before convergence
+    assert result_a["converged_hash"] == ""
