@@ -25,7 +25,7 @@ async def lifespan(mcp: FastMCP):
     await _store.disconnect()
 
 
-mcp = FastMCP("claude-negotiate", lifespan=lifespan)
+mcp = FastMCP("claude-negotiate", lifespan=lifespan, stateless_http=True, json_response=True)
 
 
 @mcp.tool()
