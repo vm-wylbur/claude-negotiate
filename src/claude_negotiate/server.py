@@ -25,7 +25,7 @@ async def lifespan(mcp: FastMCP):
     await _store.disconnect()
 
 
-mcp = FastMCP("claude-negotiate", lifespan=lifespan, stateless_http=True, json_response=True)
+mcp = FastMCP("claude-negotiate", lifespan=lifespan)
 
 
 @mcp.tool()
@@ -274,7 +274,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     args = parser.parse_args()
 
-    mcp.run(transport="streamable-http", host=args.host, port=args.port)
+    mcp.run(transport="streamable-http", host=args.host, port=args.port, stateless_http=True, json_response=True)
 
 
 if __name__ == "__main__":
