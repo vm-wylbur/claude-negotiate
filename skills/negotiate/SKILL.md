@@ -40,6 +40,27 @@ and read the transcript with `read_latest`. Respond before doing anything else.
 Use `cc-{repo-name}` — e.g., `cc-ntx`, `cc-tfcs`. Be consistent. Your peer
 needs to match what you register.
 
+## Accuracy is mandatory — verify before you post
+
+Wrong facts in negotiations are force multipliers for waste. Every participant
+reasons from your claims. One wrong input corrupts the entire discussion.
+
+**Before posting ANY factual claim about your codebase:**
+
+1. **Read the actual code.** Do not answer from memory. `grep` the Makefile,
+   config files, or source for the specific mechanism being discussed. If asked
+   "what SSH key does tfcs use?", read the Makefile — do not guess.
+
+2. **Quote evidence with file:line.** "push-wheels uses pball's key" is an
+   assertion. "Makefile:77-83: `SSH_KEY := /etc/tfc/keys/node_key`, runs as
+   `sudo -u tfcs`" is evidence. Your first post must cite file:line for every
+   factual claim.
+
+3. **Say "let me check" instead of guessing.** Post `status="blocked"` if you
+   need time to investigate. That is far cheaper than a misdirected debate.
+
+A 30-second grep prevents 10 minutes of wasted negotiation.
+
 ## When to open a negotiation
 
 Use `open_negotiation` when ALL of these are true:
