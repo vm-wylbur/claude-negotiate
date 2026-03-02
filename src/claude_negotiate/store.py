@@ -72,7 +72,7 @@ class NegotiationStore:
         initiator_id: str,
         participants: list[str],
         context: str,
-        max_rounds: int = 10,
+        max_rounds: int = 30,
         references: list[str] | None = None,
         require_human_approval: bool = False,
     ) -> str:

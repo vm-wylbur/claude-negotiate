@@ -528,7 +528,7 @@ async def test_join_negotiation(store):
     assert result_a["topic"] == "join test"
     assert result_a["negotiation_status"] == "open"
     assert result_a["turns_used"] == 2  # context + proposal
-    assert result_a["max_turns"] == 20  # 10 rounds * 2
+    assert result_a["max_turns"] == 60  # 30 rounds * 2
     assert len(result_a["turns"]) == 2
     assert result_a["last_id"] != "0"
 
