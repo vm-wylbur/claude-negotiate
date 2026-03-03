@@ -407,6 +407,48 @@ Report back to the human:
 - The artifact path
 - Any unresolved questions the negotiation surfaced
 
+### Save to Claude-mem
+
+Immediately after closing, store a structured memory so future historians
+can find this decision:
+
+```python
+mcp__claude-mem__mem-store(
+    content=f"""
+Negotiation {neg_id} closed {date}: {topic}
+Participants: {", ".join(all_participants)}
+
+AGREED:
+{one_paragraph_summary_of_what_was_agreed}
+
+KEY DECISIONS:
+- {specific_decision_1 with paths/commands/ownership}
+- {specific_decision_2}
+...
+
+CONSTRAINTS ESTABLISHED:
+- {any_constraint_this_negotiation_locked_in}
+
+UNRESOLVED / DEFERRED:
+- {anything_explicitly_left_for_a_future_negotiation or "none"}
+
+Artifact: {artifact_path}
+""",
+    tags=["negotiation", "agreement", participant1_repo, participant2_repo, topic_slug]
+)
+```
+
+**What to include:**
+- Specific paths, commands, uid/gid, permissions — not just "we agreed on ACLs"
+- Constraints (what future proposals must work within)
+- Deferred gaps by name — so the next historian surfaces them
+- The neg-id — so future historians can fetch the full artifact
+
+**What NOT to include:**
+- The Q&A from the negotiation
+- Challenge/counter history
+- Anything that wasn't actually agreed
+
 ---
 
 ## When Convergence Was Premature
