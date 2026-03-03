@@ -4,7 +4,7 @@
 #
 # claude-negotiate/Makefile
 
-.PHONY: install test run deploy sync-skills
+.PHONY: install test run deploy sync-skills install-facilitator
 
 install:
 	uv sync --extra dev
@@ -27,7 +27,13 @@ deploy:
 	ssh snowball "sudo systemctl restart claude-negotiate"
 	ssh snowball "sudo systemctl status claude-negotiate --no-pager"
 
-# Sync the negotiate skill to client machines
+# Sync the negotiate skill to client machines (user-wide)
 sync-skills:
 	rsync -av skills/negotiate/ snowball:~/.claude/skills/negotiate/
 	rsync -av skills/negotiate/ scott:~/.claude/skills/negotiate/
+
+# Install facilitator skill into this repo's .claude/skills/ (per-repo, not user-wide)
+# Run from the claude-negotiate directory; only activates when cc is launched here
+install-facilitator:
+	mkdir -p .claude/skills/facilitator
+	cp skills/facilitator/SKILL.md .claude/skills/facilitator/
