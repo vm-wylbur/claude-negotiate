@@ -468,7 +468,33 @@ class NegotiationStore:
                         "references": [r for r in state.get("references", "").split(",") if r],
                     }
                 )
-        return {"negotiations": negotiations}
+        notifications = await self._list_notifications(agent_id)
+        return {"negotiations": negotiations, "notifications": notifications}
+
+    async def notify(self, from_agent_id: str, to_agent_id: str, message: str) -> dict:
+        notification_id = uuid.uuid4().hex[:8]
+        entry = json.dumps({
+            "id": notification_id,
+            "from_agent_id": from_agent_id,
+            "message": message,
+            "created_at": _utcnow(),
+        })
+        await self._r.lpush(f"notify:{to_agent_id}", entry)
+        await self._r.expire(f"notify:{to_agent_id}", TTL)
+        return {"notification_id": notification_id, "delivered_to": to_agent_id}
+
+    async def _list_notifications(self, agent_id: str) -> list[dict]:
+        raw = await self._r.lrange(f"notify:{agent_id}", 0, -1)
+        return [json.loads(n) for n in raw]
+
+    async def dismiss_notification(self, agent_id: str, notification_id: str) -> dict:
+        raw = await self._r.lrange(f"notify:{agent_id}", 0, -1)
+        for item in raw:
+            n = json.loads(item)
+            if n["id"] == notification_id:
+                await self._r.lrem(f"notify:{agent_id}", 1, item)
+                return {"dismissed": True, "notification_id": notification_id}
+        return {"dismissed": False, "reason": "not found"}
 
     async def get_transcript(self, neg_id: str) -> dict:
         state = await self._r.hgetall(f"neg:{neg_id}:state")

@@ -115,6 +115,11 @@ reasons from your claims. One wrong input corrupts the entire discussion.
 3. **Say "let me check" instead of guessing.** Post `status="blocked"` if you
    need time to investigate. That is far cheaper than a misdirected debate.
 
+4. **Verify live state, not session memory.** If a prior negotiation agreed that
+   X was deployed, check that X is actually deployed NOW — do not assume your
+   session context reflects the current system state. A 30-second check prevents
+   a false discrepancy from wasting a round.
+
 A 30-second grep prevents 10 minutes of wasted negotiation.
 
 ## When to open a negotiation
@@ -400,6 +405,28 @@ different host.
 ```
 get_artifact(negotiation_id=neg_id)
 ```
+
+**notify / dismiss_notification**: Signal to another repo that you've completed
+work that unblocks them. Use instead of opening a full negotiation for simple
+"I'm done, you can go" messages.
+
+```
+# When you finish work that unblocks another repo:
+notify(
+    from_agent_id="cc-ansible",
+    to_agent_id="cc-tfcs",
+    message="rsyncd deployed (hrdag-ansible#83). Validate: rsync -an rsync://tfcs@<peer>/tfcs/"
+)
+
+# The recipient sees notifications in list_negotiations under 'notifications'.
+# After acting on it:
+dismiss_notification(agent_id="cc-tfcs", notification_id="<id from the notification>")
+```
+
+**When to use notify vs open a negotiation:**
+- Use `notify` for "I'm done, you can proceed" — one-liner, no artifact needed
+- Use `open_negotiation` for structured handoffs that require a written artifact
+  or acknowledgment (e.g., sharing vault secret names, validation commands)
 
 ## Round budget
 

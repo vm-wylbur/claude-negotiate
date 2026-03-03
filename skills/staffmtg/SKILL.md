@@ -110,14 +110,21 @@ open_negotiation(
 session, then post your todo list as status='comment'. Manager will synthesize
 a work plan after all surveys are in.""",
     max_rounds=20,
-    references=[...]  # neg-ids from historian, if any
+    references=[...],  # neg-ids from historian, if any
+    require_human_approval=True,
 )
 ```
 
-**Immediately tell the human:**
-> "Meeting open at neg-XXXXXXXX. Tell each session to join:
-> `list_negotiations(agent_id='cc-{repo}')`
-> or say 'staffmtg' in each session."
+**Immediately tell the human** (ready-to-paste per repo):
+> "Meeting open at neg-XXXXXXXX. Tell each session:
+>
+> **cc-hmon:**
+> `join_negotiation(negotiation_id='neg-XXXXXXXX', agent_id='cc-hmon')` — then run /survey and post your todo list with `post_position(..., status='comment')`.
+>
+> **cc-tfcs:**
+> `join_negotiation(negotiation_id='neg-XXXXXXXX', agent_id='cc-tfcs')` — then run /survey and post your todo list with `post_position(..., status='comment')`.
+>
+> *(repeat for each participant)*"
 
 ---
 
@@ -167,6 +174,29 @@ Agent("oh-my-claudecode:architect",
     "Read these survey outputs and identify the critical path. Which repo's
     work blocks the most other repos? What should go first?\n\n{surveys}")
 ```
+
+---
+
+## Phase 4a: Human Review (REQUIRED before posting)
+
+**Stop. Do NOT post to the negotiation yet.**
+
+Show the human your draft work plan in plain text. Say:
+
+> "Draft work plan — review before I post:
+>
+> [paste the full draft here]
+>
+> Any corrections before I post this to the negotiation?"
+
+Wait for the human's response. If they flag an error:
+- Fix the draft
+- Show the corrected version
+- Wait for explicit go-ahead ("looks good", "post it", "yes", etc.)
+
+Only proceed to Phase 5 after explicit human approval.
+
+**Why this step exists:** The manager synthesizes from historian context that may be stale or contain errors from prior negotiations. The human catches factual errors (dropped decisions, wrong prerequisites) before repos see and accept the plan. One wrong fact in the plan propagates to all repo sessions.
 
 ---
 

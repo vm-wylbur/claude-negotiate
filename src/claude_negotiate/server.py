@@ -75,7 +75,7 @@ async def post_position(
     negotiation_id: str,
     agent_id: str,
     content: str,
-    status: Literal["proposing", "accepting", "counter", "blocked"],
+    status: Literal["proposing", "accepting", "counter", "blocked", "comment"],
     accepting_hash: str | None = None,
 ) -> dict:
     """Post a turn in a negotiation.
@@ -253,6 +253,40 @@ async def get_artifact(negotiation_id: str) -> dict:
     available=False with a reason if not yet available.
     """
     return await _store.get_artifact(neg_id=negotiation_id)
+
+
+@mcp.tool()
+async def notify(from_agent_id: str, to_agent_id: str, message: str) -> dict:
+    """Send a lightweight notification to another agent.
+
+    Use this when you've completed work that unblocks another repo.
+    The notification appears in their list_negotiations response under
+    'notifications' at their next session start.
+
+    Example: after deploying rsyncd, cc-ansible notifies cc-tfcs:
+      notify(from_agent_id='cc-ansible', to_agent_id='cc-tfcs',
+             message='rsyncd deployed (hrdag-ansible#83). Validate with: rsync -an rsync://tfcs@<peer>/tfcs/')
+
+    The recipient should call dismiss_notification after acting on it.
+    """
+    return await _store.notify(
+        from_agent_id=from_agent_id,
+        to_agent_id=to_agent_id,
+        message=message,
+    )
+
+
+@mcp.tool()
+async def dismiss_notification(agent_id: str, notification_id: str) -> dict:
+    """Mark a notification as handled and remove it from the queue.
+
+    Call this after you've acted on a notify message so it doesn't
+    reappear at your next session start.
+    """
+    return await _store.dismiss_notification(
+        agent_id=agent_id,
+        notification_id=notification_id,
+    )
 
 
 @mcp.tool()

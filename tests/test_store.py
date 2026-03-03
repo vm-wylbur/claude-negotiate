@@ -852,3 +852,36 @@ async def test_three_party_convergence(store):
         listing = await store.list_negotiations(agent_id)
         ids = [n["negotiation_id"] for n in listing["negotiations"]]
         assert neg_id in ids, f"{agent_id} should see the negotiation"
+
+
+@pytest.mark.asyncio
+async def test_notify_and_dismiss(store):
+    """notify delivers a message to target agent's list_negotiations; dismiss removes it."""
+    result = await store.notify(
+        from_agent_id="cc-ansible",
+        to_agent_id="cc-tfcs",
+        message="rsyncd deployed (hrdag-ansible#83). Validate with: rsync -an rsync://tfcs@<peer>/tfcs/",
+    )
+    assert "notification_id" in result
+    notification_id = result["notification_id"]
+    assert result["delivered_to"] == "cc-tfcs"
+
+    # cc-tfcs sees notification in list_negotiations
+    listing = await store.list_negotiations("cc-tfcs")
+    assert "notifications" in listing
+    notifs = listing["notifications"]
+    assert len(notifs) == 1
+    assert notifs[0]["id"] == notification_id
+    assert notifs[0]["from_agent_id"] == "cc-ansible"
+    assert "rsyncd deployed" in notifs[0]["message"]
+
+    # cc-ansible does not see it (it's not their notification)
+    ansible_listing = await store.list_negotiations("cc-ansible")
+    assert ansible_listing["notifications"] == []
+
+    # dismiss removes it
+    dismiss = await store.dismiss_notification("cc-tfcs", notification_id)
+    assert dismiss["dismissed"] is True
+
+    listing_after = await store.list_negotiations("cc-tfcs")
+    assert listing_after["notifications"] == []
