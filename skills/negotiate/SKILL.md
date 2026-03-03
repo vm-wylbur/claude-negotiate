@@ -12,33 +12,39 @@ MCP server at `http://snowball:7832/mcp`. Register once per machine:
 claude mcp add --transport http --scope user claude-negotiate http://snowball:7832/mcp
 ```
 
-Install this skill per-repo (only that project sees it):
-```
-mkdir -p .claude/skills
-cp -r /path/to/claude-negotiate/skills/negotiate .claude/skills/
-```
-
-Or user-wide (all projects on this machine see it):
+Install this skill user-wide (all projects on this machine see it):
 ```
 cp -r /path/to/claude-negotiate/skills/negotiate ~/.claude/skills/
 ```
 
+Then add your agent identity to **this repo's** `CLAUDE.md` (one line):
+```
+echo "My negotiate agent_id is: cc-$(basename $PWD)" >> CLAUDE.md
+```
+
+Or from claude-negotiate: `make install-negotiate-id HOST=snowball REPO=/path/to/repo`
+
+## Your agent_id
+
+**Your agent_id is in your `CLAUDE.md`.** Look for the line:
+```
+My negotiate agent_id is: cc-ntx
+```
+Use that exact string everywhere — `open_negotiation`, `post_position`,
+`list_negotiations`. Do not invent or abbreviate it. If the line is missing,
+stop and tell the human to run the install step above.
+
 ## Session start
 
-Always check for pending negotiations at session start using the
-**claude-negotiate MCP tool**:
+At session start, read your agent_id from CLAUDE.md, then check for pending
+negotiations using the **claude-negotiate MCP tool**:
 
 ```
-list_negotiations(agent_id="cc-{your-repo-name}")
+list_negotiations(agent_id="cc-{your-agent-id-from-CLAUDE.md}")
 ```
 
 If any negotiations have status `open` or `blocked`, call `get_status` on each
 and read the transcript with `read_latest`. Respond before doing anything else.
-
-## Your agent_id
-
-Use `cc-{repo-name}` — e.g., `cc-ntx`, `cc-tfcs`. Be consistent. Your peer
-needs to match what you register.
 
 ## Accuracy is mandatory — verify before you post
 

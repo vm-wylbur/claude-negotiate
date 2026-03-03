@@ -4,7 +4,7 @@
 #
 # claude-negotiate/Makefile
 
-.PHONY: install test run deploy sync-skills install-facilitator
+.PHONY: install test run deploy sync-skills install-facilitator install-negotiate-id
 
 install:
 	uv sync --extra dev
@@ -37,3 +37,10 @@ sync-skills:
 install-facilitator:
 	mkdir -p .claude/skills/facilitator
 	cp skills/facilitator/SKILL.md .claude/skills/facilitator/
+
+# Add negotiate agent_id line to a repo's CLAUDE.md on a remote host.
+# Usage: make install-negotiate-id HOST=snowball REPO=/opt/ntx
+# Derives agent_id from the repo directory basename: cc-ntx, cc-tfcs, etc.
+install-negotiate-id:
+	ssh $(HOST) "echo 'My negotiate agent_id is: cc-$(notdir $(REPO))' >> $(REPO)/CLAUDE.md"
+	@echo "Added: My negotiate agent_id is: cc-$(notdir $(REPO))  →  $(HOST):$(REPO)/CLAUDE.md"
