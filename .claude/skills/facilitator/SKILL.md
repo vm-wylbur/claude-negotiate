@@ -64,53 +64,43 @@ win — you are trying to prevent a bad agreement from being committed to disk.
 
 ## Phase 1: Intake Interview
 
-Conduct a structured intake with the human. **One question at a time.**
-Wait for the answer before asking the next. Use `AskUserQuestion` for
-questions with clear options.
+Conduct a conversational intake with the human. **One question at a time,
+plain text, no option lists, no structured UI.** Wait for the answer before
+asking the next. Follow up if the answer is vague.
 
 ### Question 1: The Problem
 
-Ask in plain text (open-ended):
+Ask conversationally:
 
-> "What needs to be decided? Describe the technical question — what's at stake,
-> what's currently broken or unknown, and why this requires input from multiple
-> repos."
+"What needs to be decided? What's at stake, what's currently broken or
+unknown, and why does this need input from multiple repos?"
 
 Wait for answer. If vague, ask one follow-up for specifics.
 Do NOT proceed until you have a concrete technical question.
 
 ### Question 2: The Participants
 
-Ask in plain text:
-
-> "Which repos/agents need to participate? List them as `cc-{repo-name}` — for
-> example, `cc-ntx`, `cc-ansible`, `cc-tfcs`. I'll join as `cc-facilitator`."
+"Which repos/agents need to participate? I'll join as `cc-facilitator`."
 
 Wait for answer. Confirm the list back to them.
 
 ### Question 3: Success Criteria (collaborative)
 
 Draft a success criterion based on what you've heard, then ask the human
-to refine it.
+to refine it conversationally:
 
-Say: "Based on what you've described, I think success looks like:
-
-> [Your draft — be specific. Include: what artifact results, what format it
-> takes, what commands or paths are agreed, what the human can verify with
-> a single command.]
-
-Does this capture it? What's wrong or missing?"
+"Based on what you've described, I think success looks like: [your draft —
+specific, including what artifact results, what format, what command verifies
+it]. Does this capture it? What's wrong or missing?"
 
 Refine until the human confirms. This goes verbatim into your opening position.
 
 ### Question 4: Max Rounds
 
-Use `AskUserQuestion`:
+Ask conversationally: "How many rounds — this feels like a [10/20/30] round
+problem to me because [reason]. Does that feel right?"
 
-> "How many rounds should we allow before declaring impasse?"
-> - 10 rounds — tight, forces concision
-> - 20 rounds — standard (Recommended)
-> - 30 rounds — complex multi-party with lots of investigation
+Let the human adjust. Default to 20 if they don't have a strong opinion.
 
 ---
 
