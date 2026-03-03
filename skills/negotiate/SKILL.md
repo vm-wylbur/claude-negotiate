@@ -46,6 +46,56 @@ list_negotiations(agent_id="cc-{your-agent-id-from-CLAUDE.md}")
 If any negotiations have status `open` or `blocked`, call `get_status` on each
 and read the transcript with `read_latest`. Respond before doing anything else.
 
+## Staff Meeting Participation
+
+A staff meeting is an N-party negotiation where `cc-manager` coordinates work
+across repos. You'll see it in `list_negotiations` with a topic starting
+"Staff meeting".
+
+**Trigger**: someone says "staffmtg", "staff meeting", or you see it in
+`list_negotiations` at session start.
+
+### Your role
+
+1. Run `/survey` if you haven't this session. Get your current todo list.
+2. Join: `join_negotiation(negotiation_id=neg_id, agent_id="cc-{your-agent-id}")`
+3. Post your survey output as `status="comment"` — your todos, open issues,
+   any known blockers or dependencies on other repos.
+4. Wait for cc-manager's work plan (`status="proposing"`).
+5. Object if needed (see below). Accept when satisfied.
+
+### Objection protocol
+
+You get **two comment rounds** to object. Use them.
+
+- Post `status="comment"` with a specific objection:
+  - Name the dependency cc-manager missed (file:line if relevant)
+  - Name the constraint that makes the assigned priority wrong
+  - Name the prior agreement that binds this differently
+- "I don't like this" is not a valid objection.
+- Round 2: say "round 2" explicitly. State what would change your position.
+- After round 2: cc-manager rules. Accept.
+
+### Accept the work plan
+
+```
+post_position(
+    negotiation_id=neg_id,
+    agent_id="cc-{your-agent-id}",
+    content="Accepted.",
+    status="accepting",
+    accepting_hash="<content_hash of manager's final proposing turn>"
+)
+```
+
+### Do NOT
+- Post `status="proposing"` or `status="counter"` — you are accepting an
+  assignment, not negotiating your own plan
+- Accept prematurely to end the meeting
+- Object to other repos' priorities or things outside your scope
+
+---
+
 ## Accuracy is mandatory — verify before you post
 
 Wrong facts in negotiations are force multipliers for waste. Every participant

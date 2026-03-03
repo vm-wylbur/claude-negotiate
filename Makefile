@@ -4,7 +4,7 @@
 #
 # claude-negotiate/Makefile
 
-.PHONY: install test run deploy sync-skills install-facilitator install-negotiate-id
+.PHONY: install test run deploy sync-skills install-facilitator install-negotiate-id install-staffmtg
 
 install:
 	uv sync --extra dev
@@ -44,3 +44,9 @@ install-facilitator:
 install-negotiate-id:
 	ssh $(HOST) "echo 'My negotiate agent_id is: cc-$(notdir $(REPO))' >> $(REPO)/CLAUDE.md"
 	@echo "Added: My negotiate agent_id is: cc-$(notdir $(REPO))  →  $(HOST):$(REPO)/CLAUDE.md"
+
+# Install staffmtg skill into this repo's .claude/skills/ (per-repo, not user-wide)
+# Run from the claude-negotiate directory
+install-staffmtg:
+	mkdir -p .claude/skills/staffmtg
+	cp skills/staffmtg/SKILL.md .claude/skills/staffmtg/
