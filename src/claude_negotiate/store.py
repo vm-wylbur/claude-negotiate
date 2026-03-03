@@ -64,7 +64,7 @@ class NegotiationStore:
     def _validate_participant(self, state: dict, agent_id: str) -> None:
         all_p = state["participants"].split(",")
         if agent_id not in all_p and agent_id != "human":
-            raise ValueError(f"{agent_id} not a participant")
+            raise ValueError(f"{agent_id} not a participant; valid ids: {all_p}")
 
     async def open_negotiation(
         self,
@@ -120,7 +120,7 @@ class NegotiationStore:
         neg_id: str,
         agent_id: str,
         content: str,
-        status: Literal["proposing", "accepting", "counter", "blocked"],
+        status: Literal["proposing", "accepting", "counter", "blocked", "comment"],
         accepting_hash: str | None = None,
     ) -> dict:
         state_key = f"neg:{neg_id}:state"
@@ -131,6 +131,7 @@ class NegotiationStore:
             raise ValueError(f"Negotiation {neg_id} not found")
         if state["status"] not in ("open", "blocked"):
             raise ValueError(f"Negotiation {neg_id} is {state['status']}, cannot post")
+        self._validate_participant(state, agent_id)
 
         ch = _content_hash(content)
         entry = {
@@ -141,6 +142,25 @@ class NegotiationStore:
             "accepting_hash": accepting_hash or "",
             "posted_at": _utcnow(),
         }
+
+        if status == "comment":
+            # Post to stream for visibility but do NOT touch accepting hashes
+            # or check convergence. Safe to use mid-negotiation for coordination.
+            entry_id = await self._r.xadd(stream_key, entry)
+            async with self._r.pipeline() as pipe:
+                pipe.xlen(stream_key)
+                pipe.hget(state_key, "max_rounds")
+                results = await pipe.execute()
+            turns_used = results[0]
+            max_turns = int(results[1]) * 2 if results[1] else int(state["max_rounds"]) * 2
+            return {
+                "content_hash": ch,
+                "converged": False,
+                "blocked": False,
+                "turns_used": turns_used,
+                "max_turns": max_turns,
+                "entry_id": entry_id,
+            }
 
         if status == "blocked":
             entry_id = await self._r.xadd(stream_key, entry)

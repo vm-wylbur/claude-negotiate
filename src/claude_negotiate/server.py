@@ -85,6 +85,8 @@ async def post_position(
       counter    — counter-proposal responding to peer's last turn (also auto-accepted by you)
       accepting  — accept a specific proposal; requires accepting_hash
       blocked    — you cannot proceed without human input; explain why in content
+      comment    — informational post; does NOT touch accepting hashes or convergence.
+                   Use for coordination messages that must not reset your accepted position.
 
     accepting_hash: the content_hash from the turn you are accepting,
     as returned by read_latest. Required when status='accepting'.

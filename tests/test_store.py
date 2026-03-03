@@ -675,6 +675,81 @@ async def test_references_field(store):
     assert status2["references"] == []
 
 
+async def test_non_participant_cannot_post(store):
+    """Fix (a): agent_id not in participants raises ValueError."""
+    neg_id = await store.open_negotiation(
+        topic="participant validation test",
+        initiator_id="cc-pv-a",
+        participants=["cc-pv-b"],
+        context="ctx",
+    )
+
+    with pytest.raises(ValueError, match="not a participant"):
+        await store.post_position(
+            neg_id=neg_id,
+            agent_id="cc-intruder",
+            content="I should not be here",
+            status="proposing",
+        )
+
+    # Verify the valid participants can still post
+    r = await store.post_position(
+        neg_id=neg_id,
+        agent_id="cc-pv-a",
+        content="legitimate post",
+        status="proposing",
+    )
+    assert r["entry_id"]
+
+
+async def test_comment_does_not_reset_hash(store):
+    """Fix (b): comment status posts to stream but does not touch accepting hashes.
+
+    The real-world failure: agent A proposes (auto-accepts own hash = 1/2), then
+    posts a coordination 'proposing' turn which resets their accepting_hash. When
+    agent B then accepts the original hash, A's hash no longer matches → no convergence.
+    Using 'comment' instead preserves the accepting hash so convergence fires correctly.
+    """
+    neg_id = await store.open_negotiation(
+        topic="comment status test",
+        initiator_id="cc-cm-a",
+        participants=["cc-cm-b"],
+        context="ctx",
+    )
+
+    # cc-cm-a proposes (auto-accepts own hash = 1/2)
+    r_a = await store.post_position(
+        neg_id=neg_id, agent_id="cc-cm-a", content="proposal", status="proposing"
+    )
+    proposal_hash = r_a["content_hash"]
+
+    # cc-cm-a posts a coordination comment — must NOT reset their accepting hash
+    r_comment = await store.post_position(
+        neg_id=neg_id, agent_id="cc-cm-a",
+        content="I will close once we converge.",
+        status="comment",
+    )
+    assert r_comment["converged"] is False
+    assert r_comment["entry_id"]
+
+    # cc-cm-b accepts proposal_hash — should converge because cc-cm-a's hash is intact
+    r_b = await store.post_position(
+        neg_id=neg_id, agent_id="cc-cm-b", content="Accepted",
+        status="accepting", accepting_hash=proposal_hash,
+    )
+    assert r_b["converged"], "comment must not reset cc-cm-a's accepting_hash"
+
+    status = await store.get_status(neg_id)
+    assert status["status"] == "converged"
+    assert status["converged_hash"] == proposal_hash
+
+    # Comment appears in transcript
+    transcript = await store.get_transcript(neg_id)
+    comment_turns = [t for t in transcript["turns"] if t["status"] == "comment"]
+    assert len(comment_turns) == 1
+    assert "close once" in comment_turns[0]["content"]
+
+
 async def test_artifact_no_markers_unchanged(store):
     """Content without markers is written as-is."""
     neg_id = await store.open_negotiation(
