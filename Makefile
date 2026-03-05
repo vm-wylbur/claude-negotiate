@@ -50,3 +50,9 @@ install-negotiate-id:
 install-staffmtg:
 	mkdir -p .claude/skills/staffmtg
 	cp skills/staffmtg/SKILL.md .claude/skills/staffmtg/
+
+# Install designsession skill into this repo's .claude/skills/ (per-repo, not user-wide)
+# Run from the claude-negotiate directory
+install-designsession:
+	mkdir -p .claude/skills/designsession
+	cp skills/designsession/SKILL.md .claude/skills/designsession/

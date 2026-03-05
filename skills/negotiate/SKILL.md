@@ -61,8 +61,37 @@ across repos. You'll see it in `list_negotiations` with a topic starting
 2. Join: `join_negotiation(negotiation_id=neg_id, agent_id="cc-{your-agent-id}")`
 3. Post your survey output as `status="comment"` — your todos, open issues,
    any known blockers or dependencies on other repos.
-4. Wait for cc-manager's work plan (`status="proposing"`).
-5. Object if needed (see below). Accept when satisfied.
+4. Enter your persistent wait loop. Stay in this session until convergence.
+   Do NOT exit after posting your survey. Use a 20-second timeout to slow-poll
+   without burning cycles.
+
+```python
+# After posting your survey (last_id = entry_id from that post):
+while True:
+    result = wait_for_turn(neg_id, my_agent_id, since_id=last_id, timeout_seconds=20)
+
+    if result.get("timed_out"):
+        continue  # slow poll — keep waiting, don't stop
+
+    if result.get("converged") or result.get("impasse"):
+        break  # session concluded — you are dismissed
+
+    last_id = result["last_id"]
+
+    for turn in result["turns"]:
+        if turn["agent_id"] == "cc-manager":
+            if turn["status"] == "proposing":
+                # Work plan posted — evaluate (see Objection protocol below)
+                # Post accepting or comment, then loop continues
+                pass
+            elif turn["status"] == "comment":
+                # Respond if the comment is addressed to you or asks a question
+                # relevant to your repo. Otherwise keep waiting.
+                pass
+```
+
+5. Object if needed (see below). Accept when satisfied. The loop continues after
+   your accept until convergence is confirmed by the server.
 
 ### Objection protocol
 
@@ -93,6 +122,82 @@ post_position(
   assignment, not negotiating your own plan
 - Accept prematurely to end the meeting
 - Object to other repos' priorities or things outside your scope
+- Exit your wait loop early — stay until convergence
+
+---
+
+## Design Session Participation
+
+A design session is an open-ended collaborative exploration where `cc-manager`
+facilitates multi-repo design work. You'll see it in `list_negotiations` with a
+topic starting "Design session".
+
+**Trigger**: someone says "designsession", "design session", or you see it in
+`list_negotiations` at session start.
+
+### Your role
+
+1. Join: `join_negotiation(negotiation_id=neg_id, agent_id="cc-{your-agent-id}")`
+2. Post "brb doing research" as `status="comment"` — acknowledge you got the brief.
+3. Research your repo's contribution to this design problem:
+   - Read your git log for known failures, painful fixes, documented bugs
+   - Read your own docs for cross-repo dependencies and interaction points
+   - Identify what a good design would need to accommodate from your side
+4. Post your failure mode inventory as `status="comment"` — be specific:
+   - What has broken, when, how it was fixed
+   - What cross-repo interactions you depend on
+   - What gaps you know exist but haven't been fixed
+5. Enter your persistent wait loop (same pattern as staff meeting, 20s timeout).
+   Stay until convergence — cc-manager will run many rounds.
+
+### During discussion rounds
+
+cc-manager will post synthesis turns and questions (status="comment"). When
+addressed — by name or by a question relevant to your repo:
+- Respond with `status="comment"`
+- Be specific: cite file:line, issue numbers, commit hashes
+- Do NOT just agree with other repos' characterizations — verify against your
+  own code before posting
+
+When NOT addressed: stay in your wait loop. Do not post unsolicited.
+
+### During spec review (cc-manager posts status="proposing")
+
+The design spec is ready for review.
+- Read it carefully
+- If you have a specific objection (names a requirement you surfaced that was
+  missed, or a design choice that won't work for your repo): post `status="comment"`
+- If you accept: `post_position(status="accepting", accepting_hash="<hash>")`
+- You have 2 comment rounds. Use them if needed. Accept after.
+
+### Persistent wait loop (same as staff meeting)
+
+```python
+while True:
+    result = wait_for_turn(neg_id, my_agent_id, since_id=last_id, timeout_seconds=20)
+
+    if result.get("timed_out"):
+        continue  # slow poll — keep waiting
+
+    if result.get("converged") or result.get("impasse"):
+        break  # dismissed — session concluded
+
+    last_id = result["last_id"]
+
+    for turn in result["turns"]:
+        if turn["agent_id"] == "cc-manager":
+            if turn["status"] == "proposing":
+                # Design spec posted — evaluate and accept or object
+                pass
+            elif turn["status"] == "comment":
+                # Respond if addressed to you or your repo specifically
+                pass
+```
+
+### Do NOT
+- Post `status="proposing"` — only cc-manager proposes the design spec
+- Exit your wait loop to report back to your human session — stay in the meeting
+- Accept prematurely before reading the spec
 
 ---
 
