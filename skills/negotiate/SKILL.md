@@ -140,13 +140,18 @@ topic starting "Design session".
 1. Join: `join_negotiation(negotiation_id=neg_id, agent_id="cc-{your-agent-id}")`
 2. Post "brb doing research" as `status="comment"` — acknowledge you got the brief.
 3. Research your repo's contribution to this design problem:
+   - **Verify before claiming**: read your own files (git log, issue tracker,
+     CLAUDE.md, service inventory) before asserting that something exists, is
+     fixed, or is broken. Do not post from memory.
    - Read your git log for known failures, painful fixes, documented bugs
    - Read your own docs for cross-repo dependencies and interaction points
    - Identify what a good design would need to accommodate from your side
 4. Post your failure mode inventory as `status="comment"` — be specific:
-   - What has broken, when, how it was fixed
+   - What has broken, when, how it was fixed (commit hash or issue # if known)
    - What cross-repo interactions you depend on
    - What gaps you know exist but haven't been fixed
+   - **Do NOT wait for other participants to post before you post your own
+     findings.** Post as soon as you have results. Read others after.
 5. Enter your persistent wait loop (same pattern as staff meeting, 20s timeout).
    Stay until convergence — cc-manager will run many rounds.
 
@@ -159,7 +164,13 @@ addressed — by name or by a question relevant to your repo:
 - Do NOT just agree with other repos' characterizations — verify against your
   own code before posting
 
-When NOT addressed: stay in your wait loop. Do not post unsolicited.
+**Correction protocol:** If you see a factual error in another participant's
+post — a service claimed to not exist, a bug claimed to be open that you know
+is closed, a path or permission that's wrong — post a correction immediately as
+`status="comment"`. Include evidence (commit hash, `git log` output, live SSH
+result). Do not wait for cc-manager to notice it. Errors compound if unchallenged.
+
+When NOT addressed and no errors to correct: stay in your wait loop.
 
 ### During spec review (cc-manager posts status="proposing")
 

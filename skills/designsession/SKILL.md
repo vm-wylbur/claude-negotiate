@@ -107,14 +107,52 @@ open_negotiation(
     participants=[...],  # from CLAUDE.md list
     context="""Design session: [brief from human].
 
-Each participant: join, then post "brb doing research" as status='comment'.
-Then research your repo's failure modes, known bugs, and cross-repo
-interactions related to this design problem. Post your findings as
-status='comment' when ready.
+## Scope boundary
 
-This is collaborative design — no work plan, no assignments yet. We are
-exploring the design space. Your job is to surface what you know about what
-breaks and why, and what a good design would need to accommodate.
+This session produces designs that can only be verified from OUTSIDE any single
+repo. Ask yourself: "Can only an external observer see this failure?" If your
+repo's own CI or unit tests could catch it, it belongs there — not here. Flag
+uncertain cases as [SCOPE QUESTION] and cc-manager will triage.
+
+## Research guidance
+
+Join, post "brb doing research", then:
+1. Read your own repo's git log, open issues, and CLAUDE.md for documented bugs
+   and recurring pain points. **Verify facts before claiming: if you assert a
+   service, file, or fix exists, read the file or check git — do not rely on
+   memory.**
+2. Focus on: bugs that recur after being fixed, cross-repo friction (your
+   failures caused by someone else's change), and failures that persist
+   unnoticed for hours or days.
+3. For each failure mode you surface, note: what broke, how you discovered it,
+   and whether it has a commit or issue reference.
+
+Post your findings as status='comment' when ready. **Do NOT wait for other
+participants to post before you post your own findings.** The session is
+asynchronous — post as soon as you have results and continue reading others.
+
+## Correction protocol
+
+If you see a factual error in another participant's post, **correct it
+immediately** — post a short comment with the correction and evidence (commit
+hash, git log output, live SSH result). Do not let stale or unverified claims
+stand. cc-manager will incorporate corrections into the synthesis.
+
+## Required format for test/design proposals
+
+Every proposal must include a CATCHES field:
+  CATCHES: [commit hash, issue number, or incident description that this
+            would have caught]
+
+Proposals without a CATCHES field will be returned for revision.
+
+## Technical ground truth
+
+[cc-manager: fill in per design problem before sending]
+- Key schema/API fields relevant to this design:
+- Named categories/tiers agreed to:
+- Observer-only constraint: [yes/no and what that means here]
+- Active nodes/participants: [list]
 
 You will stay in this session until the design is ratified and I dismiss you.
 Slow-poll wait_for_turn with timeout_seconds=20 between your posts.""",
@@ -174,6 +212,11 @@ missing = set(participant_list) - inventory_posted
 ```
 
 Do not post during this phase. Let participants do their research.
+
+**While waiting:** read incoming turns. If a participant makes a factual claim
+that you can quickly verify is wrong (e.g., claims a service doesn't exist, or
+that a bug is open when you know it was closed), post a brief correction as
+status='comment' immediately. Do not let errors accumulate — correct early.
 
 ---
 
