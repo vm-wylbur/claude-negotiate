@@ -683,6 +683,25 @@ class NegotiationStore:
             return {"available": False, "artifact_path": artifact_path, "reason": "file not written yet"}
         return {"available": True, "artifact_path": artifact_path, "content": p.read_text()}
 
+    async def cancel_negotiation(self, neg_id: str, agent_id: str) -> dict:
+        """Cancel an open negotiation. Only the initiator can cancel."""
+        state_key = f"neg:{neg_id}:state"
+        async with self._lock(neg_id):
+            state = await self._r.hgetall(state_key)
+            if not state:
+                raise ValueError(f"Negotiation {neg_id} not found")
+            if state["initiator_id"] != agent_id:
+                raise ValueError(f"Only initiator ({state['initiator_id']}) can cancel")
+            if state["status"] not in ("open", "blocked"):
+                raise ValueError(f"Cannot cancel a negotiation in status '{state['status']}'")
+            all_participants = state["participants"].split(",")
+            async with self._r.pipeline() as pipe:
+                pipe.hset(state_key, mapping={"status": "cancelled", "cancelled_at": _utcnow()})
+                for p in all_participants:
+                    pipe.srem(f"pending:{p}", neg_id)
+                await pipe.execute()
+        return {"status": "cancelled", "negotiation_id": neg_id}
+
     async def join_negotiation(self, neg_id: str, agent_id: str) -> dict:
         """Join an existing negotiation, returning full context and transcript."""
         state = await self._r.hgetall(f"neg:{neg_id}:state")

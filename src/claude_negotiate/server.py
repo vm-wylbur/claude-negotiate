@@ -290,6 +290,17 @@ async def dismiss_notification(agent_id: str, notification_id: str) -> dict:
 
 
 @mcp.tool()
+async def cancel_negotiation(negotiation_id: str, agent_id: str) -> dict:
+    """Cancel an open negotiation. Only the initiator can cancel.
+
+    Use when a negotiation was opened prematurely or is no longer needed.
+    Removes it from all participants' pending lists.
+    Only works when status is 'open' or 'blocked' (not converged or closed).
+    """
+    return await _store.cancel_negotiation(neg_id=negotiation_id, agent_id=agent_id)
+
+
+@mcp.tool()
 async def join_negotiation(negotiation_id: str, agent_id: str) -> dict:
     """Join an existing negotiation.
 
