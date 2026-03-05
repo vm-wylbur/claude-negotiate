@@ -16,6 +16,7 @@ When filing GitHub issues or PR comments, append this footer:
 
 ---
 🕊️ cc-manager
+*All voices, one hash.*
 
 ## Notes
 
