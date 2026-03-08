@@ -319,6 +319,19 @@ If human says another round → return to Step A.
 
 ## Phase 5: Draft Design Spec
 
+**Assign the drafter explicitly before this phase begins.** When you transition to
+drafting, post a comment naming which participant is responsible for writing the
+final artifact (typically cc-server-documentation or the most documentation-focused
+repo). Include this in your transition post:
+
+> "Moving to draft phase. cc-{repo} is the assigned drafter — please post the
+> complete spec as status='proposing' with `<!-- artifact-start -->` /
+> `<!-- artifact-end -->` markers. Everyone else: wait until they post before
+> commenting."
+
+**Do not skip this.** Unassigned drafting causes multiple agents to post partial
+content, forcing repeated correction rounds.
+
 Read all turns from the full session. Draft a design spec that:
 - Describes the problem being solved
 - Lists the failure modes / requirements surfaced from each repo
